@@ -1,0 +1,162 @@
+{
+  "name": "[BAB] Social Post Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1,3,5"
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Mon/Wed/Fri 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT chunk_text, title FROM rag_chunks WHERE client_name = $1 AND (source_file LIKE '%service%' OR source_file LIKE '%faq%' OR source_file LIKE '%about%') ORDER BY RANDOM() LIMIT 3",
+        "options": {}
+      },
+      "id": "fetch-context",
+      "name": "Fetch Business Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8FrndbcfoT3Hqb5P",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a social media content creator for a small business. Generate a social media post based on the business context below. The post should be:\\n- Professional but approachable\\n- Under 280 characters for the main text\\n- Include a call-to-action\\n- Relevant to the business services\\n\\nBusiness context:\\n' + JSON.stringify($json.chunks || []) + '\\n\\nToday is: ' + new Date().toLocaleDateString('en-US', { weekday: 'long' }) + '\\n\\nRespond in JSON: {\"platform\": \"google_business\", \"text\": \"...\", \"hashtags\": [...], \"suggested_image_description\": \"...\", \"best_post_time\": \"...\"}' }] }] }) }}"
+      },
+      "id": "gemini-generate",
+      "name": "Gemini \u2014 Generate Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'social_post', platform: $json.platform, text: $json.text, hashtags: $json.hashtags, requires_approval: true }) }}"
+      },
+      "id": "send-approval",
+      "name": "Route for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "pending_approval"
+            },
+            {
+              "name": "generated_at",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "log-post",
+      "name": "Log Generated Post",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Mon/Wed/Fri 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch Business Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Business Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Generate Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Generate Post": {
+      "main": [
+        [
+          {
+            "node": "Route for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route for Approval": {
+      "main": [
+        [
+          {
+            "node": "Log Generated Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "social"
+    }
+  ],
+  "id": "327d43cea3584cca"
+}

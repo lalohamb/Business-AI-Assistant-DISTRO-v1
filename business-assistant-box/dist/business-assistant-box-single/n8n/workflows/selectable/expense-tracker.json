@@ -1,0 +1,203 @@
+{
+  "name": "[BAB] Expense Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/track-expense",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Expense Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "track-expense"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.receipt_image_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      },
+      "id": "has-receipt",
+      "name": "Has Receipt Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Extract expense information from this receipt image. Return structured data.' }, { inlineData: { mimeType: 'image/jpeg', data: $json.body.receipt_base64 } }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: { type: 'object', properties: { vendor: { type: 'string' }, date: { type: 'string' }, total: { type: 'number' }, tax: { type: 'number' }, category: { type: 'string' }, line_items: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' }, amount: { type: 'number' } } } } } } } }) }}"
+      },
+      "id": "gemini-ocr",
+      "name": "Gemini \u2014 Extract Receipt Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Categorize this manual expense entry and return structured data.\\n\\nDescription: ' + ($json.body.description || '') + '\\nAmount: ' + ($json.body.amount || 0) + '\\nDate: ' + ($json.body.date || new Date().toISOString().split('T')[0]) + '\\nVendor: ' + ($json.body.vendor || 'Unknown') + '\\n\\nRespond in JSON: {\"vendor\": \"...\", \"date\": \"...\", \"total\": 0, \"tax\": 0, \"category\": \"...\", \"line_items\": [{\"description\": \"...\", \"amount\": 0}]}' }] }] }) }}"
+      },
+      "id": "gemini-manual",
+      "name": "Gemini \u2014 Categorize Manual Entry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/{{$env.EXPENSES_SHEET_ID}}/values/Expenses!A:G:append",
+        "authentication": "oAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.date, $json.vendor, $json.category, $json.total, $json.tax, JSON.stringify($json.line_items), new Date().toISOString() ]] }) }}"
+      },
+      "id": "sheets-log",
+      "name": "Log to Expense Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, expense: { vendor: $json.vendor, date: $json.date, total: $json.total, category: $json.category }, status: 'logged' }) }}"
+      },
+      "id": "respond",
+      "name": "Respond \u2014 Expense Logged",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Expense Webhook": {
+      "main": [
+        [
+          {
+            "node": "Has Receipt Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Receipt Image?": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Extract Receipt Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini \u2014 Categorize Manual Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Extract Receipt Data": {
+      "main": [
+        [
+          {
+            "node": "Log to Expense Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Categorize Manual Entry": {
+      "main": [
+        [
+          {
+            "node": "Log to Expense Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Expense Sheet": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Expense Logged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "finance"
+    }
+  ],
+  "id": "41798124b7674681"
+}

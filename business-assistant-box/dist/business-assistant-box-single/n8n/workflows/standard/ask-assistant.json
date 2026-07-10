@@ -1,0 +1,86 @@
+{
+  "id": "a1b2c3d4e5f60001",
+  "name": "[BAB] Ask Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/ask-assistant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Ask Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "ask-assistant"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'nomic-embed-text', prompt: $json.body.query || $json.body.instruction || 'hello' }) }}",
+        "options": {}
+      },
+      "id": "embed-question",
+      "name": "Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'SELECT title, chunk_text, source_path FROM rag_chunks ORDER BY embedding <=> ' + \"'\" + JSON.stringify($json.embedding) + \"'\" + '::vector LIMIT 5' }}",
+        "options": {}
+      },
+      "id": "pgvector-search",
+      "name": "pgvector Search",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 0],
+      "credentials": {
+        "postgres": { "id": "8FrndbcfoT3Hqb5P", "name": "Postgres account 2" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gemma3:12b', stream: false, messages: [{ role: 'system', content: 'You are a professional business assistant. Answer using ONLY the provided context. Be concise and helpful. If the context lacks the answer, say so.' }, { role: 'user', content: 'Context:\\n' + $('pgvector Search').all().map(r => r.json.chunk_text).join('\\n---\\n') + '\\n\\nQuestion: ' + ($('Ask Webhook').item.json.body.query || $('Ask Webhook').item.json.body.instruction) }] }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "ollama-answer",
+      "name": "Ollama Generate Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: $json.message ? $json.message.content : 'No response generated.', sources: $('pgvector Search').all().map(r => r.json.source_path), query: $('Ask Webhook').item.json.body.query || $('Ask Webhook').item.json.body.instruction }) }}"
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 0]
+    }
+  ],
+  "connections": {
+    "Ask Webhook": { "main": [[{ "node": "Embed Question", "type": "main", "index": 0 }]] },
+    "Embed Question": { "main": [[{ "node": "pgvector Search", "type": "main", "index": 0 }]] },
+    "pgvector Search": { "main": [[{ "node": "Ollama Generate Answer", "type": "main", "index": 0 }]] },
+    "Ollama Generate Answer": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "standard" }, { "name": "client-facing" }]
+}
