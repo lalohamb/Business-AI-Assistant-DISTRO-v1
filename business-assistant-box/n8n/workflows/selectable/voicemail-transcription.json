@@ -1,0 +1,206 @@
+{
+  "name": "[BAB] Voicemail Transcription",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/voicemail",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Voicemail Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "voicemail"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Transcribe and analyze this voicemail audio.' }, { inlineData: { mimeType: $json.body.audio_mime_type || 'audio/mp3', data: $json.body.audio_base64 } }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: { type: 'object', properties: { transcription: { type: 'string' }, caller_name: { type: 'string' }, caller_phone: { type: 'string' }, urgency: { type: 'string', enum: ['urgent', 'normal', 'low'] }, category: { type: 'string' }, summary: { type: 'string' }, callback_requested: { type: 'boolean' }, action_items: { type: 'array', items: { type: 'string' } } } } } }) }}"
+      },
+      "id": "gemini-transcribe",
+      "name": "Gemini \u2014 Transcribe & Analyze",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.urgency }}",
+              "rightValue": "urgent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "is-urgent",
+      "name": "Is Urgent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'urgent_voicemail', caller: $json.caller_name, phone: $json.caller_phone, summary: $json.summary, transcription: $json.transcription, action_items: $json.action_items, requires_approval: false }) }}"
+      },
+      "id": "flag-urgent",
+      "name": "Flag as Urgent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/{{$env.VOICEMAIL_SHEET_ID}}/values/Voicemails!A:H:append",
+        "authentication": "oAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ new Date().toISOString(), $json.caller_name || 'Unknown', $json.caller_phone || '', $json.urgency, $json.category, $json.summary, $json.callback_requested, $json.transcription ]] }) }}"
+      },
+      "id": "sheets-log",
+      "name": "Log to Voicemail Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, transcription: $json.transcription, caller: $json.caller_name, urgency: $json.urgency, summary: $json.summary, callback_requested: $json.callback_requested, action_items: $json.action_items }) }}"
+      },
+      "id": "respond",
+      "name": "Respond \u2014 Processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Voicemail Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Transcribe & Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Transcribe & Analyze": {
+      "main": [
+        [
+          {
+            "node": "Is Urgent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Urgent?": {
+      "main": [
+        [
+          {
+            "node": "Flag as Urgent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log to Voicemail Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag as Urgent": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Voicemail Sheet": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "voicemail"
+    },
+    {
+      "name": "transcription"
+    }
+  ],
+  "id": "31c28f3828c14a32"
+}

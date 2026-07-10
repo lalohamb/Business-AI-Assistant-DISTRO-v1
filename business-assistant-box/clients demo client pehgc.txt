@@ -1,0 +1,16 @@
+clients/
+├── demo-client/
+├── pehgc/
+├── roofing-company/
+├── tax-office/
+└── real-estate-office/
+
+Each client gets its own:
+
+CLIENT_PROFILE.md
+USER.md
+MEMORY.md
+PROCEDURES/
+OUTPUTS/
+
+This prevents one company’s memory from contaminating another company’s workflows.
