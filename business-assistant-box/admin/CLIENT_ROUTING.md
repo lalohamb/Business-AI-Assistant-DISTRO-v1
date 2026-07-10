@@ -17,8 +17,7 @@ The user never needs to manually configure paths for each service. Change the ac
 ## The current-client Symlink
 
 ```
-/home/lalo/Documents/.nativeblackbox/opt/business-assistant-box/current-client
-    → /home/lalo/Documents/.nativeblackbox/opt/business-assistant-box/clients/demo-company
+<BASE_PATH>/current-client → <BASE_PATH>/clients/{ACTIVE_CLIENT}/
 ```
 
 This is the single routing point for the entire system.
@@ -98,9 +97,9 @@ What it does:
 ## .env Variables
 
 ```
-ACTIVE_CLIENT=demo-company
-OBSIDIAN_VAULT_PATH=/home/lalo/Documents/.nativeblackbox/opt/business-assistant-box/current-client
-OPENCLAW_WORKSPACE_PATH=/home/lalo/Documents/.nativeblackbox/opt/business-assistant-box/openclaw
+ACTIVE_CLIENT=law-office
+OBSIDIAN_VAULT_PATH=<BASE_PATH>/current-client
+OPENCLAW_WORKSPACE_PATH=<BASE_PATH>/openclaw
 ```
 
 `OBSIDIAN_VAULT_PATH` always points to `current-client` (the symlink), not directly to a client folder. This means it never needs updating when you switch clients — the symlink target changes instead.

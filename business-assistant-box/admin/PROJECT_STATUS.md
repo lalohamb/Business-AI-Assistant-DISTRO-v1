@@ -48,7 +48,7 @@ Notes: PostgreSQL with pgvector running on port 5432. RAG schema deployed with 7
 
 Phase 7 - Knowledge Vault
 Status: ✅ Complete
-Notes: Vault structure created. 4 client vaults populated (demo-company, acme-roofing, insurance-agency, law-office) with full business knowledge, procedures, memory, and FAQ. System intelligence files in place. Obsidian vault configured via current-client symlink.
+Notes: Vault structure created. 4 client vaults populated (demo-company, acme-roofing, insurance-agency, law-office) with full business knowledge, procedures, memory, and FAQ. System intelligence files in place. Obsidian vault configured via current-client symlink. Note: insurance-agency vault populated but not yet indexed into RAG.
 
 Phase 8 - RAG
 Status: ✅ Complete

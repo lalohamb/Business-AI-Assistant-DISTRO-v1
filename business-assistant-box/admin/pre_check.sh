@@ -93,6 +93,8 @@ done
 echo ""
 
 # --- ADMIN FILE VALIDATION ---
+# NOTE 2026-07-10: This section is informational only. These are documentation files,
+# not runtime dependencies. The system works without them. Consider removing in future cleanup.
 echo "=== ADMIN FILE VALIDATION ==="
 for f in BUILD_PLAN.md INSTALL_STEPS.md CHECKLIST.md SECURITY.md TROUBLESHOOTING.md COMMANDS.md ACCEPTANCE_TESTS.md DEPLOYMENT.md PROJECT_STATUS.md NEXT_ACTIONS.md CHANGELOG.md ROADMAP.md ARCHITECTURE.md POST_INSTALL_CLIENT_SETUP.md PRE_CHECK.md; do
   if [ -f "$BASE/admin/$f" ]; then
@@ -332,6 +334,14 @@ fi
 # --- OBSIDIAN VALIDATION ---
 if [ "$OBSIDIAN_ENABLED" = "true" ]; then
   echo "=== OBSIDIAN VALIDATION ==="
+
+  echo -n "Obsidian binary: "
+  if command -v obsidian &>/dev/null; then
+    echo "✅ Installed"
+  else
+    echo "⚠️  Not installed (install from https://obsidian.md/download)"
+    WARN=true
+  fi
 
   echo -n "admin/OBSIDIAN_SETUP.md: "
   if [ -f "$BASE/admin/OBSIDIAN_SETUP.md" ]; then

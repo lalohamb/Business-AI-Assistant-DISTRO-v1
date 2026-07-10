@@ -78,6 +78,7 @@ GPU pinning: Ollama is locked to the RTX 2060 SUPER via `CUDA_VISIBLE_DEVICES` U
 | Component | Implementation |
 |-----------|----------------|
 | Chat Interface | Open WebUI (port 3000) |
+| Button Dashboard | Static HTML (port 8088, optional) |
 | Workflow UI | n8n editor (port 5678) |
 | Knowledge Editor | Obsidian (local app, current-client symlink) |
 | Admin Tools | Shell scripts in admin/ |
@@ -302,6 +303,7 @@ appointment-booking, customer-intake, document-drafting, expense-tracker, invoic
 | PostgreSQL | 5432 | Docker | pgvector/pgvector:pg16 | Database + vector storage |
 | Ollama | 11434 | systemd (native) | ollama | Local LLM + embeddings |
 | Open WebUI | 3000 | Docker | ghcr.io/open-webui/open-webui:main | Chat interface |
+| Button Dashboard | 8088 | python3 http.server (optional) | Static HTML/JS | One-click workflow buttons |
 | n8n | 5678 | Docker | n8nio/n8n | Workflow automation |
 | OpenClaw | — | (deferred) | — | AI agent with web search + local exec |
 
@@ -345,7 +347,7 @@ All scripts and services read from `.env`. Key variables:
 | RAG_ENABLED | true | pgvector RAG active |
 | WORKFLOW_ENGINE | n8n | Automation engine |
 | OBSIDIAN_ENABLED | true | Knowledge editing enabled |
-| DASHBOARD_ENABLED | true | Open WebUI active |
+| DASHBOARD_ENABLED | true | Open WebUI + custom button dashboard active |
 | APPROVAL_REQUIRED_FOR_EMAIL_SEND | true | Safety gate for outbound email |
 
 ### Safety Controls (set per-script, not in .env)

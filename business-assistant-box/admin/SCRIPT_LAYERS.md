@@ -33,7 +33,7 @@ The system is built and maintained through layered shell scripts. Each layer has
 
 **Runs:** Once (idempotent — safe to rerun, skips existing)
 
-**Phases:** 0, 0B, 1, 2, 3, 4, 5, 6, 6B, 7, 7B, 8, 8B, 9
+**Phases:** 0, 0B, 1, 2, 3, 4, 5, 6, 6A, 6A2, 6B, 7, 7B, 8, 8B, 9, 10
 
 ---
 
@@ -47,7 +47,7 @@ The system is built and maintained through layered shell scripts. Each layer has
 - Verify n8n is running
 - Validate environment variables (writes missing to .env)
 - Verify middleware connection (Ollama / OpenClaw API / PostgreSQL)
-- Import workflow JSON files
+- Import workflow JSON files from standard/ and selectable/
 - Activate workflows
 - Create and verify webhook mappings
 - Test webhooks with payload
@@ -57,7 +57,7 @@ The system is built and maintained through layered shell scripts. Each layer has
 
 **Phases:** 1–8
 
-**Prerequisite:** Layer 1 complete + `customize_ui_n8n.sh` run first (to generate workflow JSON)
+**Prerequisite:** Layer 1 complete (workflows must exist in n8n/workflows/standard/ and selectable/)
 
 ---
 
@@ -89,16 +89,18 @@ The system is built and maintained through layered shell scripts. Each layer has
 
 ### customize_ui_n8n.sh
 
-**Purpose:** Generate workflow templates, dashboard UI, and Open WebUI configuration.
+**Purpose:** Generate dashboard UI, button manifest, and Open WebUI configuration.
 
 **Runs between:** Layer 1 and Layer 2
 
 **Creates:**
-- n8n/workflows/*.json (6 workflow templates)
 - dashboard/business-buttons/buttons.json
 - dashboard/custom/index.html
 - dashboard/openwebui/OPENWEBUI_BUSINESS_ASSISTANT.md
 - n8n/IMPORT_NOTES.md
+
+**Does NOT create:**
+- n8n workflow JSON files (these live in n8n/workflows/standard/ and n8n/workflows/selectable/ and are managed separately)
 
 ---
 
@@ -136,14 +138,36 @@ The system is built and maintained through layered shell scripts. Each layer has
 ## Execution Order
 
 ```
-Layer 1                    Layer 2                    Layer 3
-install.sh          →   customize_ui_n8n.sh    →   post_install_client_setup.sh
-                    →   configure_n8n.sh
-                                                        ↓
-                                                   pre_check.sh
-                                                        ↓
-                                                   PASS / FAIL
+Layer 1                    Supporting                 Layer 2                    Layer 3
+install.sh          →   customize_ui_n8n.sh    →   configure_n8n.sh    →   post_install_client_setup.sh
+(Phases 0–10)           (dashboard + UI)            (workflow import)           (client onboarding)
+                                                                                    ↓
+                                                                               pre_check.sh
+                                                                                    ↓
+                                                                               PASS / FAIL
 ```
+
+### install.sh Phase Summary
+
+| Phase | Name | Purpose |
+|-------|------|---------|
+| 0 | Project Scaffold | Create directory structure |
+| 0B | Environment Configuration | Generate .env |
+| 1 | Ubuntu Update & Tools | Install system packages |
+| 2 | Docker | Install and start Docker |
+| 3 | PostgreSQL | Start pgvector container |
+| 4 | Ollama | Install local LLM + pull models |
+| 5 | Open WebUI | Start chat interface container |
+| 6 | n8n | Start workflow engine container |
+| 6A | Import n8n Workflows | Import JSON files into n8n |
+| 6A2 | Activate n8n Workflows | Publish all imported workflows |
+| 6B | OpenClaw | Install OpenClaw (optional) |
+| 7 | pgvector | Enable vector extension |
+| 7B | RAG Schema | Deploy rag_documents + rag_chunks tables |
+| 8 | Python RAG Dependencies | Create venv, install packages |
+| 8B | RAG Index + Query Scripts | Write index_vault.py + query_vault.py |
+| 9 | Obsidian | Install native Obsidian editor |
+| 10 | RAG Pipeline | Install psycopg2 in WebUI, test pgvector connectivity, pre-warm embeddings |
 
 ---
 

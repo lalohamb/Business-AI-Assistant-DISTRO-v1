@@ -44,8 +44,7 @@ echo "  ✅ vault/                    (shared documents)"
 echo "  ✅ vector-db/*.py, *.sql     (RAG scripts, schema)"
 echo "  ✅ n8n/workflows/            (workflow JSONs, manifest)"
 echo "  ✅ dashboard/functions/      (RAG filter)"
-echo "  ✅ dashboard/business-desktop/       (desktop dashboard app)"
-echo "  ✅ dashboard/business-desktop-ms/    (multi-service dashboard)"
+
 echo "  ✅ openclaw/                 (workspace)"
 echo "  ✅ .env                      (configuration)"
 echo ""
@@ -69,11 +68,22 @@ if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
   exit 0
 fi
 
+# Sanitize .env — strip credential values before packaging
+SANITIZED_ENV="${BASE_PATH}/.env.package"
+if [ -f "${BASE_PATH}/.env" ]; then
+  sed -E 's/^(N8N_API_KEY=).+$/\1/' "${BASE_PATH}/.env" \
+    | sed -E 's/^(OPENCLAW_API_KEY=).+$/\1/' \
+    | sed -E 's/^(GOOGLE_API_KEY=).+$/\1/' \
+    > "$SANITIZED_ENV"
+  echo "  🔒 Credentials stripped from .env for packaging"
+fi
+
 cd "$(dirname "$BASE_PATH")"
 PROJECT_DIR=$(basename "$BASE_PATH")
 
 # Build zip with broad exclusions first
 zip -r "$OUTPUT" "$PROJECT_DIR" \
+  -x "${PROJECT_DIR}/.env" \
   -x "${PROJECT_DIR}/postgres/*" \
   -x "${PROJECT_DIR}/docker/*" \
   -x "${PROJECT_DIR}/logs/*" \
@@ -103,6 +113,15 @@ zip -r "$OUTPUT" "$PROJECT_DIR" \
   -x "${PROJECT_DIR}/dashboard/audit.log*" \
   -x "${PROJECT_DIR}/dashboard/config.json" \
   -x "${PROJECT_DIR}/dashboard/sentence_transformers/*"
+
+# Add sanitized .env (credentials stripped)
+if [ -f "$SANITIZED_ENV" ]; then
+  cd "$(dirname "$BASE_PATH")"
+  cp "$SANITIZED_ENV" "${PROJECT_DIR}/.env"
+  zip -u "$OUTPUT" "${PROJECT_DIR}/.env"
+  cp "${BASE_PATH}/.env" "${PROJECT_DIR}/.env"  # restore original
+  rm -f "$SANITIZED_ENV"
+fi
 
 echo ""
 echo "========================================"

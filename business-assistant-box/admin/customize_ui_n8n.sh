@@ -326,93 +326,7 @@ EOF
 write_file_safe "$BASE/dashboard/openwebui/OPENWEBUI_BUSINESS_ASSISTANT.md" "$OPENWEBUI_PROMPT" "overwrite_with_backup"
 
 echo ""
-echo "=== PHASE E — n8n Workflow Templates ==="
-
-create_workflow() {
-  local file="$1"
-  local name="$2"
-  local path="$3"
-  local task="$4"
-
-  local content
-  content=$(cat <<EOF
-{
-  "name": "$name",
-  "nodes": [
-    {
-      "parameters": {
-        "path": "$path",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "webhook-trigger",
-      "name": "Webhook Trigger",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [240, 300],
-      "webhookId": "$path"
-    },
-    {
-      "parameters": {
-        "jsCode": "const body = \$json.body || {};\\nreturn [{ json: {\\n  client: body.client || '$ACTIVE_CLIENT',\\n  task: '$task',\\n  instruction: body.instruction || '',\\n  createdAt: new Date().toISOString(),\\n  status: 'received'\\n}}];"
-      },
-      "id": "prepare-task",
-      "name": "Prepare Task",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [520, 300]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: true, message: 'Workflow template received request. Connect this node to OpenClaw execution.', data: \$json } }}"
-      },
-      "id": "respond",
-      "name": "Respond to Dashboard",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [800, 300]
-    }
-  ],
-  "connections": {
-    "Webhook Trigger": {
-      "main": [
-        [
-          {
-            "node": "Prepare Task",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Task": {
-      "main": [
-        [
-          {
-            "node": "Respond to Dashboard",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "active": false,
-  "settings": {},
-  "versionId": "business-assistant-box-template"
-}
-EOF
-)
-  write_file_safe "$BASE/n8n/workflows/$file" "$content" "overwrite_with_backup"
-}
-
-create_workflow "email-triage.json" "[BAB] Email Triage" "business/email-triage" "Use PROCEDURES/EMAIL.md. Review unread emails, categorize messages, identify urgent items, draft replies, and require approval before sending."
-create_workflow "calendar-review.json" "[BAB] Calendar Review" "business/calendar-review" "Use PROCEDURES/CALENDAR.md. Summarize today's schedule, conflicts, and reminders."
-create_workflow "daily-briefing.json" "[BAB] Daily Briefing" "business/daily-briefing" "Use PROCEDURES/DAILY_BRIEFING.md. Generate the daily executive business summary."
-create_workflow "document-drafting.json" "[BAB] Document Drafting" "business/document-drafting" "Use PROCEDURES/DOCUMENTS.md. Draft the requested business document for approval."
-create_workflow "customer-intake.json" "[BAB] Customer Intake" "business/customer-intake" "Use PROCEDURES/CUSTOMER_INTAKE.md. Process a new customer inquiry and recommend next steps."
-create_workflow "ask-assistant.json" "[BAB] Ask Assistant" "business/ask-assistant" "Use CLIENT_PROFILE.md, BUSINESS_KNOWLEDGE.md, FAQ.md, MEMORY, and vault/RAG results to answer the business question."
+echo "=== PHASE E — n8n Workflow Notes ==="
 
 N8N_IMPORT_NOTES=$(cat <<EOF
 # n8n Workflow Import Notes
@@ -421,7 +335,8 @@ N8N_IMPORT_NOTES=$(cat <<EOF
 
 Workflow templates are stored here:
 
-$BASE/n8n/workflows/
+$BASE/n8n/workflows/standard/
+$BASE/n8n/workflows/selectable/
 
 ## Import Steps
 
@@ -430,28 +345,39 @@ $BASE/n8n/workflows/
 
 2. Go to Workflows.
 
-3. Import each JSON file.
+3. Import each JSON file from standard/ and selectable/.
 
 4. Activate each workflow after reviewing it.
 
-5. Connect the placeholder "Prepare Task" node to the real OpenClaw execution method.
+5. Connect the placeholder nodes to the real AI execution method.
 
 ## Important
 
-These workflow templates are safe placeholders.
+Do NOT generate workflow files with this script.
+The canonical workflow JSONs live in n8n/workflows/standard/ and n8n/workflows/selectable/.
+See n8n/workflows/manifest.json for the full registry.
 
-They do not yet execute OpenClaw.
-
-They provide webhook endpoints and dashboard response structure.
-
-## Expected Webhooks
+## Expected Webhooks (Standard)
 
 POST /webhook/business/email-triage
 POST /webhook/business/calendar-review
 POST /webhook/business/daily-briefing
+POST /webhook/business/approval-router
+POST /webhook/business/rag-query
+POST /webhook/business/ask-assistant
+
+## Expected Webhooks (Selectable)
+
 POST /webhook/business/document-drafting
 POST /webhook/business/customer-intake
-POST /webhook/business/ask-assistant
+POST /webhook/business/appointment-booking
+POST /webhook/business/invoice-generator
+POST /webhook/business/lead-followup
+POST /webhook/business/review-requester
+POST /webhook/business/expense-tracker
+POST /webhook/business/social-post-scheduler
+POST /webhook/business/report-generator
+POST /webhook/business/voicemail-transcription
 
 ## Next Integration Step
 
