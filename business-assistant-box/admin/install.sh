@@ -576,6 +576,12 @@ if [ "$DRY_RUN" = false ] && command -v docker &>/dev/null; then
   docker --version 2>/dev/null || sudo docker --version
   docker compose version 2>/dev/null || sudo docker compose version 2>/dev/null || true
 
+  # Pre-emptive socket fix: apt post-install often fails because docker.socket
+  # isn't active yet. Reset failed state and ensure socket is up before checking.
+  sudo systemctl reset-failed docker.service 2>/dev/null || true
+  sudo systemctl start docker.socket 2>/dev/null || true
+  sleep 2
+
   if docker info &>/dev/null || sudo docker info &>/dev/null; then
     echo "  ✅ Docker daemon is running."
     DOCKER_AVAILABLE=true
