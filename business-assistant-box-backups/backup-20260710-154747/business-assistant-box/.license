@@ -1,0 +1,14 @@
+# Business Assistant Box — License
+# This file controls what features are available.
+#
+# TIER options:
+#   single  — 1 client only (standard code license)
+#   multi   — unlimited clients (cloud, rig, or upgraded license)
+#
+# Do not edit manually unless instructed.
+# Tampering with this file voids support.
+
+TIER=multi
+LICENSE_KEY=BAB-DEV-MULTI-0001
+ISSUED=2025-06-02
+EXPIRES=2027-06-02

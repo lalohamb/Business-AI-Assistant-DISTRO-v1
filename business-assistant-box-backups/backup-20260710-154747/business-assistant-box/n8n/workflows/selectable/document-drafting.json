@@ -1,0 +1,149 @@
+{
+  "name": "[BAB] Document Drafting",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/document-drafting",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Document Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "create-document"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT chunk_text FROM rag_chunks WHERE client_name = $1 AND (source_file LIKE '%template%' OR source_file LIKE '%procedure%') ORDER BY embedding <=> $2::vector LIMIT 3",
+        "options": {}
+      },
+      "id": "fetch-templates",
+      "name": "Fetch Relevant Templates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8FrndbcfoT3Hqb5P",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a document drafting assistant for a small business. Generate a professional document based on the following request.\\n\\nDocument type: ' + $json.body.document_type + '\\nRecipient: ' + ($json.body.recipient || 'N/A') + '\\nSubject/Purpose: ' + $json.body.purpose + '\\nKey details: ' + ($json.body.details || 'None provided') + '\\n\\nBusiness templates/context:\\n' + ($json.templates || 'No templates available') + '\\n\\nGenerate the complete document text. Use professional formatting. Include placeholders like [DATE], [SIGNATURE] where appropriate.' }] }] }) }}"
+      },
+      "id": "gemini-draft",
+      "name": "Gemini \u2014 Draft Document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'document_draft', document_type: $json.body.document_type, draft: $json.candidates[0].content.parts[0].text, recipient: $json.body.recipient, requires_approval: true }) }}"
+      },
+      "id": "send-approval",
+      "name": "Send for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, status: 'draft_pending_approval', document_type: $json.body.document_type, preview: $json.candidates?.[0]?.content?.parts?.[0]?.text?.substring(0, 200) + '...' }) }}"
+      },
+      "id": "respond",
+      "name": "Respond \u2014 Draft Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Document Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Relevant Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Relevant Templates": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Draft Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Draft Document": {
+      "main": [
+        [
+          {
+            "node": "Send for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send for Approval": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Draft Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "documents"
+    }
+  ],
+  "id": "68e464cf32014e42"
+}

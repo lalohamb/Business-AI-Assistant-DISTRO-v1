@@ -1,0 +1,10 @@
+AGENTS.md      = operating rules, safety, workflow discipline
+SOUL.md        = communication style
+USER.md        = business owner profile
+MEMORY.md      = long-term curated memory
+TOOLS.md       = available tools, commands, integrations
+HEARTBEAT.md   = recurring daily checklist
+IDENTITY.md    = assistant name and role
+PROMPTS.md     = reusable task prompts
+POLICIES.md    = approval rules and prohibited actions
+CLIENT_PROFILE.md = company-specific business facts

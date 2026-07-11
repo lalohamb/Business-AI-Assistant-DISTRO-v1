@@ -263,9 +263,10 @@ print_summary() {
   echo ""
   echo "Next commands:"
   echo "  ./admin/post_install_verify.sh     # Verify all services connected"
-  echo "  sudo ./admin/configure_rag_pipeline.sh  # Connect WebUI to RAG"
-  echo "  source vector-db/venv/bin/activate"
-  echo "  python vector-db/index_vault.py    # Index vault into RAG"
+  echo "  obsidian &                         # Launch Obsidian to edit vault"
+  echo ""
+  echo "  After editing vault files, re-index:"
+  echo "    source vector-db/venv/bin/activate && python vector-db/index_vault.py"
   echo ""
 
   # Obsidian status
@@ -1674,20 +1675,229 @@ except Exception as e:
     log_warn "Embedding model warmup timed out. May be slow on first RAG query."
   fi
 
+  # Create RAG filter function file
+  mkdir -p "$BASE_PATH/dashboard/functions"
+  RAG_FILTER_FILE="$BASE_PATH/dashboard/functions/business_rag_filter.py"
+
+  cat > "$RAG_FILTER_FILE" << 'RAGEOF'
+"""
+title: Business Knowledge RAG
+author: Business Assistant Box
+version: 1.1.0
+description: Retrieves relevant business context from pgvector and injects into prompts.
+type: filter
+"""
+
+import requests
+import psycopg2
+from typing import Optional
+from pydantic import BaseModel, Field
+
+
+class Filter:
+    class Valves(BaseModel):
+        pg_host: str = Field(default="host.docker.internal")
+        pg_port: int = Field(default=5432)
+        pg_user: str = Field(default="admin")
+        pg_password: str = Field(default="strongpassword")
+        pg_database: str = Field(default="businessassistant")
+        ollama_url: str = Field(default="http://host.docker.internal:11434")
+        embedding_model: str = Field(default="nomic-embed-text")
+        active_client: str = Field(default="law-office")
+        top_k: int = Field(default=5)
+        similarity_threshold: float = Field(default=0.3)
+
+    def __init__(self):
+        self.valves = self.Valves()
+
+    def _get_embedding(self, text: str) -> Optional[list]:
+        try:
+            resp = requests.post(
+                f"{self.valves.ollama_url}/api/embeddings",
+                json={"model": self.valves.embedding_model, "prompt": text},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return resp.json().get("embedding")
+        except Exception:
+            return None
+
+    def _query_chunks(self, embedding: list) -> list:
+        try:
+            conn = psycopg2.connect(
+                host=self.valves.pg_host,
+                port=self.valves.pg_port,
+                user=self.valves.pg_user,
+                password=self.valves.pg_password,
+                dbname=self.valves.pg_database,
+            )
+            cur = conn.cursor()
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            cur.execute(
+                """
+                SELECT chunk_text, source_path, 1 - (embedding <=> %s::vector) AS similarity
+                FROM rag_chunks
+                WHERE client_name = %s
+                  AND 1 - (embedding <=> %s::vector) > %s
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (embedding_str, self.valves.active_client, embedding_str, self.valves.similarity_threshold, embedding_str, self.valves.top_k),
+            )
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            return rows
+        except Exception:
+            return []
+
+    def inlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        messages = body.get("messages", [])
+        if not messages:
+            return body
+
+        last_msg = messages[-1]
+        if last_msg.get("role") != "user":
+            return body
+
+        query = last_msg.get("content", "")
+        if not query.strip():
+            return body
+
+        embedding = self._get_embedding(query)
+        if not embedding:
+            return body
+
+        chunks = self._query_chunks(embedding)
+        if not chunks:
+            return body
+
+        context_parts = []
+        for content, source, similarity in chunks:
+            context_parts.append(f"[{source} | relevance: {similarity:.2f}]\n{content}")
+
+        prefix = "Use the following business knowledge to answer. If the context doesn't help, answer normally.\n\n---\n"
+        context = prefix + "\n\n".join(context_parts) + "\n\n---\n\n"
+
+        messages[-1]["content"] = context + query
+        body["messages"] = messages
+        return body
+RAGEOF
+
+  FILES_CREATED+=("$RAG_FILTER_FILE")
+  echo "  ✅ RAG filter function written: $RAG_FILTER_FILE"
+
   echo ""
-  echo "RAG function file: $BASE_PATH/dashboard/functions/business_rag_filter.py"
+  echo "RAG function file: $RAG_FILTER_FILE"
   echo ""
-  echo "To complete RAG setup, run:"
-  echo "  sudo ./admin/configure_rag_pipeline.sh"
-  echo ""
-  echo "This will register the RAG function in Open WebUI and enable it globally."
-  echo "You will need your Open WebUI admin email and password."
 fi
 
-prompt_user "PHASE 10 — RAG Pipeline" "" "MANUAL STEP REQUIRED:
-- Run: sudo ./admin/configure_rag_pipeline.sh
-- You will need your Open WebUI admin email + password (created in Phase 5).
-- This registers the RAG filter function in Open WebUI."
+prompt_user "PHASE 10 — RAG Pipeline" "PHASE 11 — Index Vault" "RAG filter function created."
+
+# ==========================================
+# PHASE 11 — Index Vault into pgvector
+# ==========================================
+echo "=== PHASE 11 — Index Vault ==="
+echo ""
+
+VENV_PATH="$BASE_PATH/vector-db/venv"
+INDEX_SCRIPT="$BASE_PATH/vector-db/index_vault.py"
+
+if [ ! -f "$INDEX_SCRIPT" ]; then
+  echo "  ⚠️  index_vault.py not found. Skipping."
+  WARNINGS+=("Vault indexing skipped — script not found")
+else
+  echo "  Activating venv and indexing vault..."
+  if [ -f "$VENV_PATH/bin/activate" ]; then
+    (
+      source "$VENV_PATH/bin/activate"
+      cd "$BASE_PATH"
+      python "$INDEX_SCRIPT" 2>&1 | tail -5
+    )
+    INDEX_EXIT=$?
+    if [ $INDEX_EXIT -eq 0 ]; then
+      CHUNK_COUNT=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM rag_chunks" 2>/dev/null | tr -d ' ')
+      echo "  ✅ Vault indexed ($CHUNK_COUNT chunks in pgvector)"
+    else
+      echo "  ⚠️  Indexing returned exit code $INDEX_EXIT"
+      WARNINGS+=("Vault indexing may have failed — check vector-db/index_vault.py")
+    fi
+  else
+    echo "  ⚠️  Python venv not found at $VENV_PATH"
+    WARNINGS+=("Vault indexing skipped — venv not found")
+  fi
+fi
+echo ""
+
+prompt_user "PHASE 11 — Index Vault" "PHASE 12 — Register RAG Filter" "Vault documents indexed into pgvector."
+
+# ==========================================
+# PHASE 12 — Register RAG Filter in OpenWebUI
+# ==========================================
+echo "=== PHASE 12 — Register RAG Filter in Open WebUI ==="
+echo ""
+
+RAG_FILTER_FILE="$BASE_PATH/dashboard/functions/business_rag_filter.py"
+
+if [ ! -f "$RAG_FILTER_FILE" ]; then
+  echo "  ⚠️  RAG filter file not found. Skipping."
+  WARNINGS+=("RAG filter registration skipped — file not found")
+else
+  # Install psycopg2 in container if needed
+  if ! _docker exec openwebui python3 -c "import psycopg2" 2>/dev/null; then
+    echo "  Installing psycopg2 in OpenWebUI container..."
+    _docker exec openwebui pip install psycopg2-binary --quiet 2>&1
+  fi
+
+  # Register directly via SQLite (bypasses API auth issues)
+  echo "  Registering RAG filter function..."
+  REGISTER_RESULT=$(_docker exec -i openwebui python3 -c "
+import sqlite3, json, sys
+
+code = sys.stdin.read()
+function_id = 'business_knowledge_rag'
+
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+
+meta = json.dumps({
+    'description': 'Retrieves relevant business context from pgvector and injects into prompts',
+    'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.1.0', 'type': 'filter'}
+})
+
+cur.execute('SELECT id FROM function WHERE id=?', (function_id,))
+if cur.fetchone():
+    cur.execute('UPDATE function SET content=?, meta=?, is_active=1, is_global=1 WHERE id=?', (code, meta, function_id))
+    print('UPDATED')
+else:
+    cur.execute(
+        'INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, datetime(\"now\"), datetime(\"now\"))',
+        (function_id, 'system', 'Business Knowledge RAG', 'filter', code, meta)
+    )
+    print('CREATED')
+
+conn.commit()
+conn.close()
+" < "$RAG_FILTER_FILE" 2>&1)
+
+  if echo "$REGISTER_RESULT" | grep -qE "UPDATED|CREATED"; then
+    echo "  ✅ RAG filter registered, enabled, and set as global ($REGISTER_RESULT)"
+  else
+    echo "  ⚠️  Registration issue: $REGISTER_RESULT"
+    WARNINGS+=("RAG filter may need manual setup in Admin → Functions")
+  fi
+
+  # Restart OpenWebUI to pick up the new function
+  echo "  Restarting OpenWebUI to load filter..."
+  _docker restart openwebui >/dev/null 2>&1
+  echo "  ✅ OpenWebUI restarted"
+fi
+echo ""
+
+prompt_user "PHASE 12 — Register RAG Filter" "" "RAG pipeline fully configured.
+- Filter: business_knowledge_rag (active + global)
+- The filter auto-injects business context into every chat.
+- To re-index after editing vault files: source vector-db/venv/bin/activate && python vector-db/index_vault.py"
 
 # ==========================================
 # FINAL SUMMARY

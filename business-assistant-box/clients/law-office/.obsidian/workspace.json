@@ -94,7 +94,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "BUSINESS_KNOWLEDGE.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for BUSINESS_KNOWLEDGE"
+              "title": "Backlinks"
             }
           },
           {
@@ -113,12 +112,11 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "BUSINESS_KNOWLEDGE.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from BUSINESS_KNOWLEDGE"
+              "title": "Outgoing links"
             }
           },
           {
@@ -156,13 +154,12 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "BUSINESS_KNOWLEDGE.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of BUSINESS_KNOWLEDGE"
+              "title": "Outline"
             }
           }
         ]
@@ -184,5 +181,7 @@
     }
   },
   "active": "ff86eb102eed87ab",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "BUSINESS_KNOWLEDGE.md"
+  ]
 }

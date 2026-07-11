@@ -307,7 +307,7 @@ if [ "$OBSIDIAN_ENABLED" = "true" ]; then
   # Check vault directory exists and has .md files
   VAULT_PATH="$BASE_PATH/current-client"
   if [ -d "$VAULT_PATH" ]; then
-    MD_COUNT=$(find "$VAULT_PATH" -name "*.md" 2>/dev/null | wc -l)
+    MD_COUNT=$(find -L "$VAULT_PATH" -name "*.md" 2>/dev/null | wc -l)
     if [ "$MD_COUNT" -gt 0 ]; then
       pass "Vault directory has $MD_COUNT .md files: $VAULT_PATH"
     else

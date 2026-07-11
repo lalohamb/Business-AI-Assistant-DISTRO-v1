@@ -1,0 +1,26 @@
+business-assistant-box/
+├── AGENTS.md
+├── SOUL.md
+├── USER.md
+├── MEMORY.md
+├── TOOLS.md
+├── HEARTBEAT.md
+├── IDENTITY.md
+├── PROMPTS.md
+├── POLICIES.md
+├── CLIENT_PROFILE.md
+├── PROCEDURES/
+│   ├── EMAIL.md
+│   ├── CALENDAR.md
+│   ├── DOCUMENTS.md
+│   ├── CUSTOMER_INTAKE.md
+│   └── DAILY_BRIEFING.md
+├── MEMORY/
+│   ├── LEARNED_PATTERNS.md
+│   ├── OWNER_PREFERENCES.md
+│   ├── CUSTOMER_RULES.md
+│   └── VENDOR_RULES.md
+└── OUTPUTS/
+    ├── drafts/
+    ├── reports/
+    └── logs/

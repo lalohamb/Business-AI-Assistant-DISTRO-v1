@@ -2,9 +2,6 @@
 """Index Obsidian vault and system/client files into PostgreSQL + pgvector."""
 
 import os
-import csv
-import email
-import io
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
@@ -18,10 +15,9 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "ollama")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-EXCLUDE_DIRS = {"admin", "logs", "backups", "docker", "postgres", "node_modules", ".git", "venv", ".obsidian"}
+EXCLUDE_DIRS = {"admin", "logs", "backups", "docker", "postgres", "node_modules", ".git", "venv"}
 EXCLUDE_EXTENSIONS = {".key", ".pem"}
 EXCLUDE_FILES = {".env"}
-INDEXABLE_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".html", ".htm", ".eml"}
 
 INDEX_PATHS = [
     os.path.join(BASE_PATH, "system"),
@@ -52,83 +48,34 @@ def get_files(paths):
                 ext = os.path.splitext(f)[1].lower()
                 if ext in EXCLUDE_EXTENSIONS:
                     continue
-                if ext in INDEXABLE_EXTENSIONS:
+                if ext in (".md", ".txt"):
                     files.append(os.path.join(root, f))
     return files
 
 
-def extract_text(filepath):
-    """Extract text content from supported file formats."""
-    ext = os.path.splitext(filepath)[1].lower()
-
-    if ext in (".md", ".txt"):
-        with open(filepath, "r", errors="ignore") as f:
-            return f.read().strip()
-
-    elif ext == ".pdf":
-        import fitz  # pymupdf
-        doc = fitz.open(filepath)
-        text = "\n".join(page.get_text() for page in doc)
-        doc.close()
-        return text.strip()
-
-    elif ext == ".docx":
-        from docx import Document
-        doc = Document(filepath)
-        return "\n".join(p.text for p in doc.paragraphs).strip()
-
-    elif ext == ".xlsx":
-        from openpyxl import load_workbook
-        wb = load_workbook(filepath, read_only=True, data_only=True)
-        lines = []
-        for sheet in wb.worksheets:
-            lines.append(f"## {sheet.title}")
-            for row in sheet.iter_rows(values_only=True):
-                cells = [str(c) if c is not None else "" for c in row]
-                lines.append(" | ".join(cells))
-        wb.close()
-        return "\n".join(lines).strip()
-
-    elif ext == ".csv":
-        with open(filepath, "r", errors="ignore", newline="") as f:
-            reader = csv.reader(f)
-            lines = [" | ".join(row) for row in reader]
-        return "\n".join(lines).strip()
-
-    elif ext in (".html", ".htm"):
-        from bs4 import BeautifulSoup
-        with open(filepath, "r", errors="ignore") as f:
-            soup = BeautifulSoup(f.read(), "html.parser")
-        return soup.get_text(separator="\n", strip=True)
-
-    elif ext == ".eml":
-        with open(filepath, "rb") as f:
-            msg = email.message_from_binary_file(f)
-        parts = []
-        if msg["subject"]:
-            parts.append(f"Subject: {msg['subject']}")
-        if msg["from"]:
-            parts.append(f"From: {msg['from']}")
-        if msg["date"]:
-            parts.append(f"Date: {msg['date']}")
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    parts.append(payload.decode(errors="ignore"))
-        return "\n".join(parts).strip()
-
-    return ""
-
-
 def chunk_text(text, chunk_size=512, overlap=64):
-    """Split text into overlapping chunks."""
+    """Split text into chunks, preferring markdown section boundaries."""
+    import re
+    # Split on markdown section separators first
+    sections = re.split(r'\n---\n|\n## ', text)
     chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
+    for i, section in enumerate(sections):
+        # Re-add the heading prefix stripped by split (except first)
+        if i > 0 and not section.startswith('#'):
+            section = '## ' + section
+        section = section.strip()
+        if not section:
+            continue
+        # If section fits in one chunk, keep it whole
+        if len(section) <= chunk_size:
+            chunks.append(section)
+        else:
+            # Fall back to size-based splitting for large sections
+            start = 0
+            while start < len(section):
+                end = start + chunk_size
+                chunks.append(section[start:end])
+                start += chunk_size - overlap
     return [c for c in chunks if c.strip()]
 
 
@@ -158,11 +105,8 @@ def index():
     cur.execute("DELETE FROM rag_documents WHERE client_name = %s", (ACTIVE_CLIENT,))
 
     for filepath in files:
-        try:
-            content = extract_text(filepath)
-        except Exception as e:
-            print(f"  Skipped (parse error): {filepath} — {e}")
-            continue
+        with open(filepath, "r", errors="ignore") as f:
+            content = f.read().strip()
 
         if not content:
             continue

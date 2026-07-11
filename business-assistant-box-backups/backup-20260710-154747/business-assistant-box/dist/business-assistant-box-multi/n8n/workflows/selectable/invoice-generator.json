@@ -1,0 +1,161 @@
+{
+  "name": "[BAB] Invoice Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/generate-invoice",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Invoice Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "generate-invoice"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Generate a professional invoice based on the following details. Return as JSON.\\n\\nClient: ' + $json.body.client_name + '\\nClient email: ' + ($json.body.client_email || '') + '\\nServices performed: ' + JSON.stringify($json.body.line_items || []) + '\\nPayment terms: ' + ($json.body.payment_terms || 'Net 30') + '\\nNotes: ' + ($json.body.notes || '') + '\\n\\nRespond in JSON: {\"invoice_number\": \"INV-YYYYMMDD-001\", \"date\": \"...\", \"due_date\": \"...\", \"client\": {\"name\": \"...\", \"email\": \"...\"}, \"line_items\": [{\"description\": \"...\", \"quantity\": 1, \"rate\": 0, \"amount\": 0}], \"subtotal\": 0, \"tax\": 0, \"total\": 0, \"payment_terms\": \"...\", \"email_body\": \"...\"}' }] }] }) }}"
+      },
+      "id": "gemini-invoice",
+      "name": "Gemini \u2014 Generate Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/{{$env.INVOICE_SHEET_ID}}/values/Invoices!A:H:append",
+        "authentication": "oAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.invoice_number, $json.date, $json.client.name, $json.client.email, $json.total, $json.payment_terms, $json.due_date, 'pending' ]] }) }}"
+      },
+      "id": "sheets-log",
+      "name": "Log Invoice to Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'invoice_send', recipient: $json.client.email, invoice_number: $json.invoice_number, total: $json.total, email_body: $json.email_body, requires_approval: true }) }}"
+      },
+      "id": "send-approval",
+      "name": "Approve Before Sending",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, invoice_number: $json.invoice_number, total: $json.total, status: 'pending_approval', client: $json.client.name }) }}"
+      },
+      "id": "respond",
+      "name": "Respond \u2014 Invoice Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Invoice Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Generate Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Generate Invoice": {
+      "main": [
+        [
+          {
+            "node": "Log Invoice to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Invoice to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Approve Before Sending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Before Sending": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Invoice Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "billing"
+    }
+  ],
+  "id": "adc46fc6274a4630"
+}
