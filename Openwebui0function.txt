@@ -1,0 +1,109 @@
+"""
+title: Business Knowledge RAG
+author: Business Assistant Box
+version: 1.1.0
+description: Retrieves relevant business context from pgvector and injects into prompts.
+type: filter
+"""
+
+import requests
+import psycopg2
+from typing import Optional
+from pydantic import BaseModel, Field
+
+
+class Filter:
+    class Valves(BaseModel):
+        pg_host: str = Field(default="host.docker.internal")
+        pg_port: int = Field(default=5432)
+        pg_user: str = Field(default="admin")
+        pg_password: str = Field(default="strongpassword")
+        pg_database: str = Field(default="businessassistant")
+        ollama_url: str = Field(default="http://host.docker.internal:11434")
+        embedding_model: str = Field(default="nomic-embed-text")
+        active_client: str = Field(default="law-office")
+        top_k: int = Field(default=5)
+        similarity_threshold: float = Field(default=0.3)
+
+    def __init__(self):
+        self.valves = self.Valves()
+
+    def _get_embedding(self, text: str) -> Optional[list]:
+        try:
+            resp = requests.post(
+                f"{self.valves.ollama_url}/api/embeddings",
+                json={"model": self.valves.embedding_model, "prompt": text},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return resp.json().get("embedding")
+        except Exception:
+            return None
+
+    def _query_chunks(self, embedding: list) -> list:
+        try:
+            conn = psycopg2.connect(
+                host=self.valves.pg_host,
+                port=self.valves.pg_port,
+                user=self.valves.pg_user,
+                password=self.valves.pg_password,
+                dbname=self.valves.pg_database,
+            )
+            cur = conn.cursor()
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            cur.execute(
+                """
+                SELECT chunk_text, source_path, 1 - (embedding <=> %s::vector) AS similarity
+                FROM rag_chunks
+                WHERE client_name = %s
+                  AND 1 - (embedding <=> %s::vector) > %s
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (
+                    embedding_str,
+                    self.valves.active_client,
+                    embedding_str,
+                    self.valves.similarity_threshold,
+                    embedding_str,
+                    self.valves.top_k,
+                ),
+            )
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            return rows
+        except Exception:
+            return []
+
+    def inlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        messages = body.get("messages", [])
+        if not messages:
+            return body
+
+        last_msg = messages[-1]
+        if last_msg.get("role") != "user":
+            return body
+
+        query = last_msg.get("content", "")
+        if not query.strip():
+            return body
+
+        embedding = self._get_embedding(query)
+        if not embedding:
+            return body
+
+        chunks = self._query_chunks(embedding)
+        if not chunks:
+            return body
+
+        context_parts = []
+        for content, source, similarity in chunks:
+            context_parts.append(f"[{source} | relevance: {similarity:.2f}]\n{content}")
+
+        prefix = "Use the following business knowledge to answer. If the context doesn't help, answer normally.\n\n---\n"
+        context = prefix + "\n\n".join(context_parts) + "\n\n---\n\n"
+
+        messages[-1]["content"] = context + query
+        body["messages"] = messages
+        return body

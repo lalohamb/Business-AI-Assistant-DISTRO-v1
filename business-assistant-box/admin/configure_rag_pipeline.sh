@@ -216,8 +216,28 @@ CREATED_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.std
 if [ "$CREATED_ID" = "$FUNCTION_ID" ]; then
   echo "  ✅ Function registered: $FUNCTION_ID"
 else
-  echo "  ⚠️  Registration response: $RESPONSE"
-  echo "     Function may need manual creation in UI."
+  echo "  ⚠️  API registration issue. Updating directly in database..."
+  _docker exec openwebui python3 -c "
+import sqlite3, json
+code = open('/dev/stdin').read()
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT id FROM function WHERE id=?', ('${FUNCTION_ID}',))
+if cur.fetchone():
+    cur.execute('UPDATE function SET content=?, is_active=1, is_global=1 WHERE id=?', (code, '${FUNCTION_ID}'))
+else:
+    meta = json.dumps({'description': 'Retrieves relevant business context from pgvector and injects into prompts', 'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.1.0', 'type': 'filter'}})
+    cur.execute('INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, datetime("now"), datetime("now"))', ('${FUNCTION_ID}', 'system', 'Business Knowledge RAG', 'filter', code, meta))
+conn.commit()
+conn.close()
+print('OK')
+" < "$FUNCTION_FILE" 2>&1
+  DB_RESULT=$?
+  if [ $DB_RESULT -eq 0 ]; then
+    echo "  ✅ Function updated directly in database"
+  else
+    echo "  ❌ Database update failed. Paste code manually in Admin → Functions."
+  fi
 fi
 echo ""
 
@@ -257,24 +277,24 @@ import psycopg2
 import requests
 
 # Get embedding for test query
-resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': 'nomic-embed-text', 'prompt': 'What is Life Legacy'}, timeout=10)
+resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': 'nomic-embed-text', 'prompt': 'Tell me about this business'}, timeout=120)
 embedding = resp.json()['embedding']
 
 # Query pgvector
 conn = psycopg2.connect(host='host.docker.internal', port=5432, user='admin', password='strongpassword', dbname='businessassistant')
 cur = conn.cursor()
 cur.execute('''
-    SELECT title, chunk_text, 1 - (embedding <=> %s::vector) AS similarity
+    SELECT source_path, chunk_text, 1 - (embedding <=> %s::vector) AS similarity
     FROM rag_chunks
-    WHERE client_name = 'demo-company'
+    WHERE client_name = '${ACTIVE_CLIENT}'
     ORDER BY embedding <=> %s::vector
     LIMIT 3
 ''', (embedding, embedding))
 results = cur.fetchall()
 conn.close()
 
-for title, chunk, sim in results:
-    print(f'  [{sim:.3f}] {title}: {chunk[:100]}...')
+for path, chunk, sim in results:
+    print(f'  [{sim:.3f}] {path}: {chunk[:100]}...')
 " 2>&1)
 
 if echo "$E2E_TEST" | grep -q "\[0\."; then
@@ -306,7 +326,7 @@ echo "    3. Ask questions in Open WebUI (localhost:3000)"
 echo "    4. The RAG filter automatically injects relevant business context"
 echo ""
 echo "  TEST IT:"
-echo "    Ask 'What is Life Legacy?' in the chat — it should answer from BUSINESS_KNOWLEDGE.md"
+echo "    Ask a question about your business in the chat — it should answer from BUSINESS_KNOWLEDGE.md"
 echo ""
 echo "  NOTE: After editing files in Obsidian, re-run the indexer to update RAG:"
 echo "    source vector-db/venv/bin/activate && python vector-db/index_vault.py"
