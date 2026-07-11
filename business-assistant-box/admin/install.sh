@@ -266,7 +266,7 @@ print_summary() {
   echo "  obsidian &                         # Launch Obsidian to edit vault"
   echo ""
   echo "  After editing vault files, re-index:"
-  echo "    source vector-db/venv/bin/activate && python vector-db/index_vault.py"
+  echo "    ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
   echo ""
 
   # Obsidian status
@@ -1270,10 +1270,22 @@ else
     pip install --quiet python-docx || log_warn "Failed to install python-docx"
     pip install --quiet openpyxl || log_warn "Failed to install openpyxl"
     pip install --quiet beautifulsoup4 || log_warn "Failed to install beautifulsoup4"
+    # Verify critical deps are importable
+    if python -c "import psycopg2, dotenv, requests" 2>/dev/null; then
+      echo "  ✅ RAG dependencies verified (psycopg2, dotenv, requests)"
+    else
+      log_warn "RAG dependency verification failed. Retrying install..."
+      pip install --quiet psycopg2-binary python-dotenv requests 2>/dev/null
+      if ! python -c "import psycopg2, dotenv, requests" 2>/dev/null; then
+        log_warn "RAG dependencies still missing. Run manually: source $RAG_VENV/bin/activate && pip install psycopg2-binary python-dotenv requests"
+        WARNINGS+=("RAG Python dependencies failed to install in venv")
+      fi
+    fi
     deactivate
     echo "RAG dependencies installed in $RAG_VENV"
   else
     log_warn "Could not create Python venv. Install manually: python3 -m venv $RAG_VENV"
+    WARNINGS+=("Python venv creation failed — RAG indexing will not work")
   fi
 fi
 
@@ -1518,8 +1530,8 @@ if __name__ == "__main__":
 safe_write_file "$QUERY_FILE" "$QUERY_CONTENT" "RAG query script"
 
 prompt_user "PHASE 8B — RAG Index + Query Scripts" "PHASE 9 — Obsidian (Native)" "Scripts created:
-- Index vault: python vector-db/index_vault.py
-- Query vault: python vector-db/query_vault.py 'your question'
+- Index vault: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
+- Query vault: ./vector-db/venv/bin/python3 ./vector-db/query_vault.py 'your question'
 - Both read DB credentials and paths from .env automatically."
 
 # ==========================================
@@ -1601,7 +1613,7 @@ Obsidian is the **Human Editable Business Brain**.
 ## Integration
 
 The RAG indexer reads from the Obsidian vault path and indexes into PostgreSQL + pgvector.
-Run \`python vector-db/index_vault.py\` after editing vault contents."
+Run \`./vector-db/venv/bin/python3 ./vector-db/index_vault.py\` after editing vault contents."
 
   safe_write_file "$OBSIDIAN_NOTES" "$OBSIDIAN_CONTENT" "Obsidian native installation documentation"
 else
@@ -1897,7 +1909,7 @@ echo ""
 prompt_user "PHASE 12 — Register RAG Filter" "" "RAG pipeline fully configured.
 - Filter: business_knowledge_rag (active + global)
 - The filter auto-injects business context into every chat.
-- To re-index after editing vault files: source vector-db/venv/bin/activate && python vector-db/index_vault.py"
+- To re-index after editing vault files: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
 
 # ==========================================
 # FINAL SUMMARY
