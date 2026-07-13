@@ -102,8 +102,10 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - OLLAMA_BASE_URL=${OLLAMA_URL:-http://ollama:11434}
       - DB_HOST=postgres
+      - BASE_PATH=/data
     volumes:
-      - client_vault:/vault
+      - client_data:/data/clients/${CLIENT_ID}
+      - system_data:/data/system
       - ./vector-db:/app
     networks:
       - internal
@@ -114,7 +116,8 @@ volumes:
   webui_data:
   n8n_data:
   pg_data:
-  client_vault:
+  client_data:
+  system_data:
 
 networks:
   internal:
@@ -169,7 +172,7 @@ EMBEDDING_PROVIDER=openai_compatible
 2. Add Docker Compose service → paste template
 3. Set environment variables (CLIENT_ID, CLIENT_SUBDOMAIN, DB_PASSWORD)
 4. Deploy
-5. Upload client vault files via SFTP or S3 sync
+5. Upload client documents via SFTP or S3 sync to client DOCUMENTS/ folder
 6. Run RAG indexer: `docker compose --profile indexer up rag-indexer`
 
 ### Automated (CLI script):
@@ -182,7 +185,7 @@ CLIENT_ID="$1"
 SUBDOMAIN="$2"
 DB_PASSWORD=$(openssl rand -hex 16)
 
-# 1. Create client vault from template
+# 1. Create client folder from template
 mkdir -p /data/clients/${CLIENT_ID}
 cp -r /data/clients/templates/* /data/clients/${CLIENT_ID}/
 
@@ -248,7 +251,7 @@ Coolify/Traefik handles per-subdomain routing + SSL.
 ## Migration from Current Setup
 
 ### What Stays the Same:
-- Client vault structure (`clients/{name}/`)
+- Client folder structure (`clients/{name}/` with DOCUMENTS/ subdirectories)
 - RAG indexing scripts (index_vault.py, query_vault.py)
 - n8n workflows (export JSON, import into new stack)
 - Open WebUI configuration
@@ -276,8 +279,8 @@ for client in $(ls /data/clients/); do
   docker compose -p ${client} exec postgres pg_dump -U admin businessassistant \
     | gzip > /backups/${client}/db-$(date +%Y%m%d).sql.gz
 
-  # Vault files
-  tar czf /backups/${client}/vault-$(date +%Y%m%d).tar.gz /data/clients/${client}/
+  # Client files
+  tar czf /backups/${client}/client-$(date +%Y%m%d).tar.gz /data/clients/${client}/
 
   # Upload to DO Spaces
   s3cmd put /backups/${client}/* s3://bab-backups/${client}/

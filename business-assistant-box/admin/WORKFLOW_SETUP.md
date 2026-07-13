@@ -85,7 +85,7 @@ These ship with every install.
 | Trigger | Every 5 minutes (polling) |
 | Credentials | Gmail OAuth2 |
 | Google Scopes | gmail.readonly, gmail.send |
-| AI Provider | Gemini (GOOGLE_API_KEY) or Ollama |
+| AI Provider | Ollama (default) |
 | Setup Time | ~10 minutes |
 
 **What it does:**
@@ -117,7 +117,7 @@ Edit the "Every 5 Minutes" trigger node → change `minutesInterval` value.
 | Trigger | Daily at 7:00 AM |
 | Credentials | Google Calendar OAuth2 |
 | Google Scopes | calendar.readonly, calendar.events |
-| AI Provider | Ollama or Gemini |
+| AI Provider | Ollama (default) |
 | Setup Time | ~5 minutes |
 
 **What it does:**
@@ -136,7 +136,7 @@ Edit the "Every 5 Minutes" trigger node → change `minutesInterval` value.
 | Trigger | Weekdays at 6:30 AM |
 | Credentials | Gmail OAuth2, Google Calendar OAuth2 |
 | Google Scopes | gmail.readonly, calendar.readonly |
-| AI Provider | Ollama or Gemini |
+| AI Provider | Ollama (default) |
 | Setup Time | ~10 minutes |
 
 **What it does:**
@@ -144,6 +144,13 @@ Edit the "Every 5 Minutes" trigger node → change `minutesInterval` value.
 2. Queries RAG for open tasks and business context
 3. Compiles priorities, risks, and action items
 4. Outputs a morning briefing summary
+5. **Writes briefing to `n8n/storage/TODAY.md`** for RAG indexing
+
+**Auto-sync to client MEMORY:**
+The `admin/sync_today.sh` script copies `n8n/storage/TODAY.md` to `clients/{ACTIVE_CLIENT}/MEMORY/TODAY.md` and re-indexes. Add to crontab:
+```
+35 6 * * 1-5 /home/ubuntu/.business-assistant-box/business-assistant-box/admin/sync_today.sh
+```
 
 ---
 
@@ -399,7 +406,7 @@ curl -X PATCH -H "Authorization: Bearer $N8N_API_KEY" \
 | Polling too frequent / API quota | Increase `minutesInterval` in the schedule trigger node |
 | Wrong email account monitored | The OAuth credential determines the account — create new credential for different email |
 | n8n can't reach Ollama | Check Ollama is running: `curl http://localhost:11434/api/tags` |
-| Gemini returns 400 | Check `GOOGLE_API_KEY` is set in `.env` and valid |
+| Gemini returns 400 | Workflows no longer use Gemini by default. See `admin/Ollama-to-Gemini.md` to revert |
 | Approval never arrives | Check Approval Router workflow is active and webhook URL is correct |
 
 ---

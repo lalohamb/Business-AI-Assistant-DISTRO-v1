@@ -72,7 +72,7 @@ Schema: `chunk_text`, `source_path`, `client_name`, `embedding`
 
 ```
 Phase 10 — Writes RAG filter file (heredoc, no escaping issues)
-Phase 11 — Indexes vault into pgvector (automatic)
+Phase 11 — Indexes client into pgvector (automatic)
 Phase 12 — Registers filter in OpenWebUI SQLite DB (bypasses API auth)
          — Sets is_active=1, is_global=1
          — Restarts OpenWebUI container
@@ -81,5 +81,5 @@ Phase 12 — Registers filter in OpenWebUI SQLite DB (bypasses API auth)
 ### Notes
 
 - On 8GB GPU: use smaller chat models (llama3.2, qwen) to avoid embedding timeout during model swap
-- After editing vault files, re-index: `source vector-db/venv/bin/activate && python vector-db/index_vault.py`
+- After editing vault files, re-index: `./vector-db/venv/bin/python3 ./vector-db/index_vault.py`
 - configure_rag_pipeline.sh can still be run standalone — it authenticates via signin and has SQLite fallback

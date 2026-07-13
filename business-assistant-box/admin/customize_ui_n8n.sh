@@ -526,7 +526,7 @@ DASHBOARD_HTML=$(cat <<'EOF'
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              client: "demo-company",
+              client: "${ACTIVE_CLIENT}",
               source: "business-assistant-dashboard",
               instruction: btn.label
             })

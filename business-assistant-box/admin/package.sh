@@ -43,7 +43,7 @@ mkdir -p "$OUTPUT"
 echo "Copying core files..."
 
 # Directories to include (empty structure)
-for dir in system vault/company-documents vault/financials vault/contracts vault/handbooks vault/uploads vault/websites vector-db n8n/workflows/standard n8n/workflows/selectable openclaw dashboard docker logs backups; do
+for dir in system vector-db n8n/workflows/standard n8n/workflows/selectable openclaw dashboard docker logs backups; do
   mkdir -p "$OUTPUT/$dir"
 done
 
@@ -171,7 +171,12 @@ OPENCLAW_WORKSPACE_PATH=
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:14b
 EMBEDDING_PROVIDER=ollama
+# Embedding model options (change EMBEDDING_DIMENSIONS to match):
+#   nomic-embed-text       -> 768 dimensions (default, fast)
+#   mxbai-embed-large      -> 1024 dimensions (better accuracy)
+#   snowflake-arctic-embed -> 1024 dimensions (enterprise focused)
 EMBEDDING_MODEL=nomic-embed-text
+# Must match model above
 EMBEDDING_DIMENSIONS=768
 ACTIVE_CLIENT=my-business
 BASE_PATH=
@@ -185,6 +190,7 @@ N8N_API_KEY=
 OPENWEBUI_BASE_URL=http://localhost:3000
 BUSINESS_BUTTONS_ENABLED=true
 APPROVAL_REQUIRED_FOR_EMAIL_SEND=true
+# Optional: only needed if switching workflows to Gemini (see Ollama-to-Gemini.md)
 GOOGLE_API_KEY=
 GOOGLE_PROJECT_ID=
 GOOGLE_LOCATION=us-central1
@@ -228,7 +234,12 @@ OPENCLAW_WORKSPACE_PATH=
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:14b
 EMBEDDING_PROVIDER=ollama
+# Embedding model options (change EMBEDDING_DIMENSIONS to match):
+#   nomic-embed-text       -> 768 dimensions (default, fast)
+#   mxbai-embed-large      -> 1024 dimensions (better accuracy)
+#   snowflake-arctic-embed -> 1024 dimensions (enterprise focused)
 EMBEDDING_MODEL=nomic-embed-text
+# Must match model above
 EMBEDDING_DIMENSIONS=768
 ACTIVE_CLIENT=my-business
 BASE_PATH=
@@ -242,16 +253,16 @@ N8N_API_KEY=
 OPENWEBUI_BASE_URL=http://localhost:3000
 BUSINESS_BUTTONS_ENABLED=true
 APPROVAL_REQUIRED_FOR_EMAIL_SEND=true
+# Optional: only needed if switching workflows to Gemini (see Ollama-to-Gemini.md)
 GOOGLE_API_KEY=
 GOOGLE_PROJECT_ID=
 GOOGLE_LOCATION=us-central1
 GEMINI_MODEL=gemini-2.0-flash
 EOF
 
-  # Patch index_vault.py to remove client_name switching awareness
-  # (keeps client_name column for schema compat but hardcodes "my-business")
-  sed -i 's/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "my-business")/' "$OUTPUT/vector-db/index_vault.py"
-  sed -i 's/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "my-business")/' "$OUTPUT/vector-db/query_vault.py"
+  # Patch index_vault.py default client
+  sed -i 's/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "insurance-agency")/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "my-business")/' "$OUTPUT/vector-db/index_vault.py"
+  sed -i 's/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "insurance-agency")/ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "my-business")/' "$OUTPUT/vector-db/query_vault.py"
 
 fi
 

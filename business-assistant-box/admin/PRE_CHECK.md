@@ -25,7 +25,7 @@ Key variables that control validation:
 | EMBEDDING_PROVIDER | If "ollama", Ollama must be running |
 | EMBEDDING_DIMENSIONS | Determines expected vector column size in RAG schema |
 | ACTIVE_CLIENT | Determines which client directory is validated |
-| OBSIDIAN_ENABLED | If true, vault path must exist |
+| OBSIDIAN_ENABLED | If true, client path must exist |
 | RAG_ENABLED | If true, PostgreSQL + pgvector + schema required |
 | DASHBOARD_ENABLED | If true, Open WebUI must be running |
 | WORKFLOW_ENGINE | If "n8n", n8n must be running |
@@ -53,7 +53,7 @@ Required Directories:
 - [ ] admin
 - [ ] system
 - [ ] clients
-- [ ] vault
+- [ ] clients
 - [ ] postgres
 - [ ] vector-db
 - [ ] dashboard
@@ -136,7 +136,7 @@ System can operate but maintenance may be impacted.
 
 # Vault Validation
 
-Expected Location: `vault/`
+Expected Location: `clients/{ACTIVE_CLIENT}/DOCUMENTS/`
 
 Required Directories:
 

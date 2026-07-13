@@ -37,7 +37,7 @@ echo ""
 echo "    Phase 1 → install.sh            (infrastructure)"
 echo "    Phase 2 → configure_credentials.sh (Google OAuth2)"
 echo "    Phase 3 → configure_n8n.sh      (workflows)"
-echo "    Phase 4 → post_install_client_setup.sh (client vault)"
+echo "    Phase 4 → post_install_client_setup.sh (client documents)"
 echo "    Phase 5 → switch_client.sh      (activate client)"
 echo "    Phase 6 → index_vault.py        (RAG indexing)"
 echo "    Phase 7 → post_install_verify.sh (validation)"
@@ -206,15 +206,15 @@ echo "  PHASE 6 — RAG Indexing"
 echo "========================================"
 echo ""
 
-read -p "  Index client vault into RAG? [y/skip]: " rag_choice
+read -p "  Index client documents into RAG? [y/skip]: " rag_choice
 case "$rag_choice" in
   y|Y|yes)
     if [ "$DRY_RUN" = true ]; then
-      echo "  [DRY RUN] Would run: vector-db/venv/bin/python vector-db/index_vault.py"
+      echo "  [DRY RUN] Would run: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
       PHASE_RESULTS+=("Phase 6: RAG Indexing — SKIPPED (dry run)")
     else
       if [ -f "$BASE/vector-db/venv/bin/python" ]; then
-        "$BASE/vector-db/venv/bin/python" "$BASE/vector-db/index_vault.py"
+        "$BASE/vector-db/venv/bin/python3" "$BASE/vector-db/index_vault.py"
         PHASE_RESULTS+=("Phase 6: RAG Indexing — ✅ Complete")
       else
         echo "  ⚠️  Python venv not found. Create it first:"

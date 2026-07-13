@@ -45,13 +45,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a scheduling assistant. A client wants to book an appointment.\\n\\nClient: ' + $json.body.client_name + '\\nService: ' + $json.body.service_type + '\\nPreferred date: ' + $json.body.preferred_date + '\\nPreferred time: ' + ($json.body.preferred_time || 'any') + '\\nDuration needed: ' + ($json.body.duration_minutes || 60) + ' minutes\\n\\nBusy times on that day: ' + JSON.stringify($json.calendars?.primary?.busy || []) + '\\n\\nFind the best available slot. Respond in JSON: {\"available\": true/false, \"suggested_slot\": {\"start\": \"ISO datetime\", \"end\": \"ISO datetime\"}, \"alternative_slots\": [...], \"confirmation_message\": \"...\"}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a scheduling assistant. A client wants to book an appointment.\\n\\nClient: ' + $json.body.client_name + '\\nService: ' + $json.body.service_type + '\\nPreferred date: ' + $json.body.preferred_date + '\\nPreferred time: ' + ($json.body.preferred_time || 'any') + '\\nDuration needed: ' + ($json.body.duration_minutes || 60) + ' minutes\\n\\nBusy times on that day: ' + JSON.stringify($json.calendars?.primary?.busy || []) + '\\n\\nFind the best available slot. Respond in JSON: {\"available\": true/false, \"suggested_slot\": {\"start\": \"ISO datetime\", \"end\": \"ISO datetime\"}, \"alternative_slots\": [...], \"confirmation_message\": \"...\"}', stream: false }) }}"
       },
-      "id": "gemini-schedule",
-      "name": "Gemini \u2014 Find Best Slot",
+      "id": "ollama-schedule",
+      "name": "Ollama \u2014 Find Best Slot",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -152,14 +152,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Find Best Slot",
+            "node": "Ollama \u2014 Find Best Slot",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Find Best Slot": {
+    "Ollama \u2014 Find Best Slot": {
       "main": [
         [
           {

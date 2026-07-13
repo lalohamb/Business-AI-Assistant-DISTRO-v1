@@ -136,7 +136,7 @@ install.sh → customize_ui_n8n.sh → configure_n8n.sh → post_install_client_
 
 1. OpenClaw API as primary LLM provider, Ollama as optional local fallback
 2. Obsidian = human-editable business brain (client data only, never admin/logs)
-3. RAG indexes system/ + clients/{active}/ + vault/ — never admin/logs/backups
+3. RAG indexes system/ + clients/{active}/ — never admin/logs/backups
 4. Embedding dimensions configurable via .env (default 768)
 5. Multi-client via ACTIVE_CLIENT in .env + client_name column in RAG tables
 6. All scripts prompt after each phase — user controls the pace

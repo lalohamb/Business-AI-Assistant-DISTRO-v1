@@ -1,8 +1,18 @@
-# Obsidian Setup
+# Obsidian Setup (Native)
+
+## Launch
+
+    obsidian &
 
 ## Vault Path
 
-`/home/laloahambrickday/Downloads/.nativeblackbox/opt/business-assistant-box/current-client`
+`/home/ubuntu/.business-assistant-box/business-assistant-box-backups/backup-20260710-154747/business-assistant-box/current-client` → `clients/${ACTIVE_CLIENT}`
+
+## First Time Setup
+
+1. Run `obsidian &`
+2. Select **Open folder as vault**
+3. Choose: `/home/ubuntu/.business-assistant-box/business-assistant-box-backups/backup-20260710-154747/business-assistant-box/current-client`
 
 ## Rules
 

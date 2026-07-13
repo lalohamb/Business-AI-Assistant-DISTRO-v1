@@ -85,13 +85,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are an email triage assistant for a small business. Classify the following email into one of: URGENT, ROUTINE, SPAM, REQUIRES_RESPONSE, INFORMATIONAL. Then draft a brief response if needed.\\n\\nSubject: ' + $json.subject + '\\nFrom: ' + $json.from + '\\nBody: ' + $json.snippet + '\\n\\nRespond in JSON format: {\"classification\": \"...\", \"priority\": 1-5, \"draft_response\": \"...\", \"action\": \"respond|archive|flag|delete\"}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are an email triage assistant for a small business. Classify the following email into one of: URGENT, ROUTINE, SPAM, REQUIRES_RESPONSE, INFORMATIONAL. Then draft a brief response if needed.\\n\\nSubject: ' + $json.subject + '\\nFrom: ' + $json.from + '\\nBody: ' + $json.snippet + '\\n\\nRespond in JSON format: {\"classification\": \"...\", \"priority\": 1-5, \"draft_response\": \"...\", \"action\": \"respond|archive|flag|delete\"}', stream: false }) }}"
       },
-      "id": "gemini-classify",
-      "name": "Gemini \u2014 Classify Email",
+      "id": "ollama-classify",
+      "name": "Ollama \u2014 Classify Email",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -192,7 +192,7 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Classify Email",
+            "node": "Ollama \u2014 Classify Email",
             "type": "main",
             "index": 0
           }
@@ -200,7 +200,7 @@
         []
       ]
     },
-    "Gemini \u2014 Classify Email": {
+    "Ollama \u2014 Classify Email": {
       "main": [
         [
           {

@@ -122,21 +122,76 @@ fi
 # Step 7 — Notify about Obsidian vault change
 echo "  Vault symlink updated. If Obsidian is open, close and reopen the vault."
 
+# Step 8 — Flush old client chunks and re-index RAG
+echo ""
+echo "  Re-indexing RAG for $CLIENT..."
+VENV_PYTHON="$BASE/vector-db/venv/bin/python3"
+INDEX_SCRIPT="$BASE/vector-db/index_vault.py"
+
+if [ -f "$VENV_PYTHON" ] && [ -f "$INDEX_SCRIPT" ]; then
+  # Flush all other clients' chunks so only active client data remains
+  "$VENV_PYTHON" -c "
+import psycopg2
+conn = psycopg2.connect(host='localhost', port=5432, user='${PG_USER:-admin}', password='${PG_PASSWORD:-strongpassword}', dbname='${PG_DATABASE:-businessassistant}')
+cur = conn.cursor()
+cur.execute(\"DELETE FROM rag_chunks WHERE client_name != %s\", ('$CLIENT',))
+cur.execute(\"DELETE FROM rag_documents WHERE client_name != %s\", ('$CLIENT',))
+conn.commit()
+conn.close()
+print(f'  Flushed old client data from RAG database.')
+" 2>/dev/null
+
+  # Re-index active client
+  "$VENV_PYTHON" "$INDEX_SCRIPT" 2>&1 | tail -3
+  if [ $? -eq 0 ]; then
+    echo "  ✅ RAG re-indexed for $CLIENT"
+  else
+    echo "  ⚠️  RAG indexing failed. Run manually: $VENV_PYTHON $INDEX_SCRIPT"
+  fi
+else
+  echo "  ⚠️  Python venv or index script not found. Run manually:"
+  echo "     $VENV_PYTHON $INDEX_SCRIPT"
+fi
+
+# Step 9 — Ensure RAG filter is active in OpenWebUI
+FILTER_FILE="$BASE/dashboard/functions/business_rag_filter.py"
+if docker ps --format '{{.Names}}' | grep -q openwebui 2>/dev/null; then
+  if [ -f "$FILTER_FILE" ]; then
+    docker cp "$FILTER_FILE" openwebui:/tmp/filter.py 2>/dev/null
+    docker exec openwebui python3 -c "
+import sqlite3
+with open('/tmp/filter.py', 'r') as f:
+    code = f.read()
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT id FROM function WHERE id=?', ('business_knowledge_rag',))
+if cur.fetchone():
+    cur.execute('UPDATE function SET content=?, is_active=1, is_global=1 WHERE id=?', (code, 'business_knowledge_rag'))
+else:
+    import json
+    meta = json.dumps({'description': 'Business Knowledge RAG filter', 'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.2.0', 'type': 'filter'}})
+    cur.execute('INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, datetime(\"now\"), datetime(\"now\"))', ('business_knowledge_rag', 'system', 'Business Knowledge RAG', 'filter', code, meta))
+conn.commit()
+conn.close()
+print('  ✅ RAG filter deployed and enabled in OpenWebUI')
+" 2>&1
+    docker restart openwebui >/dev/null 2>&1 &
+    echo "  ✅ OpenWebUI restarting with updated filter"
+  else
+    echo "  ⚠️  Filter file not found: $FILTER_FILE"
+  fi
+else
+  echo "  ⚠️  OpenWebUI container not running. Deploy filter manually."
+fi
+
 echo ""
 echo "========================================"
 echo "  ✅ Switched to: $CLIENT"
 echo "========================================"
 echo ""
-echo "Next steps:"
-echo "  1. Re-index RAG:"
-echo "     source vector-db/venv/bin/activate"
-echo "     ACTIVE_CLIENT=$CLIENT python3 vector-db/index_vault.py"
+echo "  RAG indexed, filter active, ready to use."
 echo ""
-echo "  2. Verify system:"
-echo "     ./admin/post_install_verify.sh"
-echo ""
-echo "  3. Open Obsidian: obsidian & (vault: $BASE/current-client)"
-echo ""
-echo "  Note: n8n workflows query rag_chunks WHERE client_name='$CLIENT'."
-echo "        Re-indexing (step 1) is required for workflows to use new client data."
+echo "  Optional:"
+echo "    ./admin/post_install_verify.sh    # Full system check"
+echo "    obsidian &                        # Open vault: $BASE/current-client"
 echo ""

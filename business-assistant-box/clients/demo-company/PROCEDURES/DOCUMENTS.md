@@ -49,7 +49,7 @@ Define document creation standards for LifeLegacy Insurance.
 - Font: clean and professional (no Comic Sans, no decorative fonts)
 - File naming: YYYY-MM-DD_ClientLastName_DocumentType
 - Save location: Google Drive > Clients > [Client Name] > Documents
-- Also save copy in vault/company-documents if template-worthy
+- Also save copy in DOCUMENTS/company-documents if template-worthy
 
 ---
 

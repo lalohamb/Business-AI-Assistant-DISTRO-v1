@@ -1,8 +1,18 @@
-# Obsidian Setup
+# Obsidian Setup (Native)
+
+## Launch
+
+    obsidian &
 
 ## Vault Path
 
-`/home/laloahambrickday/Downloads/.nativeblackbox/opt/business-assistant-box/current-client`
+`/home/ubuntu/.business-assistant-box/business-assistant-box/current-client` → `clients/${ACTIVE_CLIENT}`
+
+## First Time Setup
+
+1. Run `obsidian &`
+2. Select **Open folder as vault**
+3. Choose: `/home/ubuntu/.business-assistant-box/business-assistant-box/current-client`
 
 ## Rules
 
@@ -24,4 +34,4 @@ Obsidian is the **Human Editable Business Brain**.
 ## Integration
 
 The RAG indexer reads from the Obsidian vault path and indexes into PostgreSQL + pgvector.
-Run `python vector-db/index_vault.py` after editing vault contents.
+Run `./vector-db/venv/bin/python3 ./vector-db/index_vault.py` after editing client documents.

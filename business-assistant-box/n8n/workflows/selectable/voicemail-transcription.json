@@ -21,13 +21,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Transcribe and analyze this voicemail audio.' }, { inlineData: { mimeType: $json.body.audio_mime_type || 'audio/mp3', data: $json.body.audio_base64 } }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: { type: 'object', properties: { transcription: { type: 'string' }, caller_name: { type: 'string' }, caller_phone: { type: 'string' }, urgency: { type: 'string', enum: ['urgent', 'normal', 'low'] }, category: { type: 'string' }, summary: { type: 'string' }, callback_requested: { type: 'boolean' }, action_items: { type: 'array', items: { type: 'string' } } } } } }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Analyze this voicemail transcription text and extract structured information.\\n\\nTranscription/message: ' + ($json.body.transcription_text || $json.body.message || 'No transcription available') + '\\n\\nRespond in JSON: {\"transcription\": \"...\", \"caller_name\": \"...\", \"caller_phone\": \"...\", \"urgency\": \"urgent|normal|low\", \"category\": \"...\", \"summary\": \"...\", \"callback_requested\": true/false, \"action_items\": [...]}', stream: false }) }}"
       },
-      "id": "gemini-transcribe",
-      "name": "Gemini \u2014 Transcribe & Analyze",
+      "id": "ollama-transcribe",
+      "name": "Ollama \u2014 Analyze Voicemail",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -129,14 +129,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Transcribe & Analyze",
+            "node": "Ollama \u2014 Analyze Voicemail",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Transcribe & Analyze": {
+    "Ollama \u2014 Analyze Voicemail": {
       "main": [
         [
           {

@@ -58,13 +58,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Write a brief, personalized follow-up email for a business lead. Keep it warm, professional, and under 100 words. Do not be pushy.\\n\\nLead name: ' + $json.name + '\\nService interest: ' + $json.service + '\\nDays since last contact: ' + $json.days_since + '\\nPrevious touchpoints: ' + $json.touchpoints + '\\n\\nRespond in JSON: {\"subject\": \"...\", \"body\": \"...\", \"suggested_cta\": \"...\"}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Write a brief, personalized follow-up email for a business lead. Keep it warm, professional, and under 100 words. Do not be pushy.\\n\\nLead name: ' + $json.name + '\\nService interest: ' + $json.service + '\\nDays since last contact: ' + $json.days_since + '\\nPrevious touchpoints: ' + $json.touchpoints + '\\n\\nRespond in JSON: {\"subject\": \"...\", \"body\": \"...\", \"suggested_cta\": \"...\"}', stream: false }) }}"
       },
-      "id": "gemini-draft",
-      "name": "Gemini \u2014 Draft Follow-Up",
+      "id": "ollama-draft",
+      "name": "Ollama \u2014 Draft Follow-Up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -117,14 +117,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Draft Follow-Up",
+            "node": "Ollama \u2014 Draft Follow-Up",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Draft Follow-Up": {
+    "Ollama \u2014 Draft Follow-Up": {
       "main": [
         [
           {

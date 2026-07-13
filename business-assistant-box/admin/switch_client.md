@@ -10,7 +10,7 @@ cd ~/.business-assistant-box/business-assistant-box
 Then re-index the RAG:
 
 ```bash
-cd vector-db && ./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 Restart Obsidian to see the new vault.
@@ -80,7 +80,7 @@ Then restart Obsidian (Ctrl+P → "Reload app without saving" or close/reopen).
 You forgot to re-index. The vector database still has the previous client's chunks:
 
 ```bash
-cd vector-db && ./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 This deletes old chunks for the active client and re-indexes from scratch.

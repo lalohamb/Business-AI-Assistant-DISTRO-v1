@@ -35,10 +35,10 @@ else
   AI_PROVIDER="openclaw_api"
   LOCAL_LLM_ENABLED="false"
   EMBEDDING_PROVIDER="ollama"
-  EMBEDDING_DIMENSIONS="768"
-  ACTIVE_CLIENT="demo-company"
+  EMBEDDING_DIMENSIONS="${EMBEDDING_DIMENSIONS:-768}"
+  ACTIVE_CLIENT="${ACTIVE_CLIENT:-demo-company}"
   OBSIDIAN_ENABLED="true"
-  OBSIDIAN_VAULT_PATH="$BASE/clients/demo-company"
+  OBSIDIAN_VAULT_PATH="$BASE/clients/$ACTIVE_CLIENT"
   RAG_ENABLED="true"
   DASHBOARD_ENABLED="true"
   WORKFLOW_ENGINE="n8n"
@@ -70,7 +70,7 @@ echo ""
 
 # --- ROOT DIRECTORY VALIDATION ---
 echo "=== ROOT DIRECTORY VALIDATION ==="
-for dir in admin system clients vault postgres vector-db dashboard n8n openclaw docker logs backups; do
+for dir in admin system clients postgres vector-db dashboard n8n openclaw docker logs backups; do
   if [ -d "$BASE/$dir" ]; then
     echo "[✓] $dir"
   else
@@ -106,13 +106,13 @@ for f in BUILD_PLAN.md INSTALL_STEPS.md CHECKLIST.md SECURITY.md TROUBLESHOOTING
 done
 echo ""
 
-# --- VAULT VALIDATION ---
-echo "=== VAULT VALIDATION ==="
-for dir in company-documents financials contracts handbooks websites uploads; do
-  if [ -d "$BASE/vault/$dir" ]; then
-    echo "[✓] $dir"
+# --- CLIENT DOCUMENTS VALIDATION ---
+echo "=== CLIENT DOCUMENTS VALIDATION ==="
+for dir in contracts financials handbooks websites uploads company-documents; do
+  if [ -d "$CLIENT_PATH/DOCUMENTS/$dir" ]; then
+    echo "[✓] DOCUMENTS/$dir"
   else
-    echo "[✗] $dir MISSING"
+    echo "[✗] DOCUMENTS/$dir MISSING"
     WARN=true
   fi
 done
@@ -354,7 +354,7 @@ if [ "$OBSIDIAN_ENABLED" = "true" ]; then
   echo -n "Vault path ($OBSIDIAN_VAULT_PATH): "
   if [ -L "$OBSIDIAN_VAULT_PATH" ] || [ -d "$OBSIDIAN_VAULT_PATH" ]; then
     echo "✅ Exists"
-    # Verify vault points to client dir, not admin/logs/docker/backups
+    # Verify path points to client dir, not admin/logs/docker/backups
     RESOLVED_PATH=$(readlink -f "$OBSIDIAN_VAULT_PATH" 2>/dev/null || echo "$OBSIDIAN_VAULT_PATH")
     if echo "$RESOLVED_PATH" | grep -qE "/(admin|logs|docker|backups)/"; then
       echo "  ⚠️  Vault path should point to client directory, not system directories"

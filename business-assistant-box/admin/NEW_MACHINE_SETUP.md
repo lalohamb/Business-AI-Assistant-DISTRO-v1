@@ -245,7 +245,7 @@ Imports workflows into n8n, activates them, tests webhooks.
 ./admin/post_install_client_setup.sh
 ```
 
-Prompts for client name(s), copies templates, creates vault directories, indexes into RAG.
+Prompts for client name(s), copies templates, creates document directories, indexes into RAG.
 
 ---
 
@@ -331,7 +331,7 @@ To bring client data from another machine:
 
 ```bash
 # On source machine:
-tar -czf client-backup.tar.gz clients/ vault/ system/ .env
+tar -czf client-backup.tar.gz clients/ system/ .env
 
 # On new machine:
 tar -xzf client-backup.tar.gz -C /opt/business-assistant-box/
@@ -343,6 +343,5 @@ tar -xzf client-backup.tar.gz -C /opt/business-assistant-box/
 
 Then re-index RAG:
 ```bash
-source vector-db/venv/bin/activate
-python3 vector-db/index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```

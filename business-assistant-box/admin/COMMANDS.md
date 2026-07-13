@@ -218,24 +218,18 @@ journalctl -u ollama --since "1 hour ago"
 ## RAG / Vector Database
 
 ```bash
-# Activate the venv
-source vector-db/venv/bin/activate
-
-# Or run directly with venv python
-cd vector-db
-
 # Index the active client's vault into pgvector
-./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 
 # Query the RAG database
-./venv/bin/python query_vault.py "What services do we offer?"
-./venv/bin/python query_vault.py "Who is the owner?"
+./vector-db/venv/bin/python3 ./vector-db/query_vault.py "What services do we offer?"
+./vector-db/venv/bin/python3 ./vector-db/query_vault.py "Who is the owner?"
 
 # Index a specific client (override env)
-ACTIVE_CLIENT=acme-roofing ./venv/bin/python index_vault.py
+ACTIVE_CLIENT=acme-roofing ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 
 # Install/update RAG dependencies
-./venv/bin/pip install psycopg2-binary python-dotenv requests
+./vector-db/venv/bin/pip install psycopg2-binary python-dotenv requests
 
 # Recreate the venv from scratch
 rm -rf vector-db/venv
@@ -376,7 +370,7 @@ cp -r clients/templates clients/<new-client-name>
 
 # Switch client (full process)
 ./admin/switch_client.sh <client-name>
-cd vector-db && ./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 
 # Check active client
 grep ACTIVE_CLIENT .env
@@ -448,7 +442,7 @@ docker compose up -d n8n
 docker compose down
 sudo systemctl restart ollama
 docker compose up -d
-cd vector-db && ./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 ---

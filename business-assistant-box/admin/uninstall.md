@@ -37,8 +37,8 @@ The uninstaller never removes:
 
 - `admin/` — install scripts and docs
 - `system/` — agent rules, policies, prompts
-- `clients/` — all business knowledge vaults
-- `vault/` — shared documents
+- `clients/` — all business knowledge & documents
+
 - `n8n/workflows/` — workflow JSON exports
 - `vector-db/*.py`, `*.sql` — RAG scripts and schema
 - `.env` — configuration
@@ -77,7 +77,7 @@ Select only component 6 (Python RAG venv). Then reinstall:
 cd vector-db
 python3 -m venv venv
 ./venv/bin/pip install psycopg2-binary python-dotenv requests
-./venv/bin/python index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 ### Reset Docker services (keep data)
@@ -167,7 +167,7 @@ tar czf ~/bab-backup.tar.gz \
   --exclude='docker' \
   --exclude='logs' \
   --exclude='venv' \
-  ~/.business-assistant-box/business-assistant-box/{admin,system,clients,vault,n8n/workflows,vector-db/*.py,vector-db/*.sql,.env}
+  ~/.business-assistant-box/business-assistant-box/{admin,system,clients,n8n/workflows,vector-db/*.py,vector-db/*.sql,.env}
 ```
 
 ### Want to remove everything including client data

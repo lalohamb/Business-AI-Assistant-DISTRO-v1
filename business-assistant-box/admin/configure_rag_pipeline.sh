@@ -64,7 +64,7 @@ echo "=== STEP 2 — Test pgvector connectivity from container ==="
 RAG_TEST=$(_docker exec openwebui python3 -c "
 import psycopg2
 try:
-    conn = psycopg2.connect(host='host.docker.internal', port=5432, user='admin', password='strongpassword', dbname='businessassistant')
+    conn = psycopg2.connect(host='host.docker.internal', port=5432, user='${PG_USER:-admin}', password='${PG_PASSWORD:-strongpassword}', dbname='${PG_DATABASE:-businessassistant}')
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM rag_chunks')
     count = cur.fetchone()[0]
@@ -92,10 +92,11 @@ echo ""
 # ==========================================
 echo "=== STEP 3 — Test embedding generation from container ==="
 
+EMBED_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
 EMBED_TEST=$(_docker exec openwebui python3 -c "
 import requests
 try:
-    resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': 'nomic-embed-text', 'prompt': 'test'}, timeout=120)
+    resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': '${EMBED_MODEL}', 'prompt': 'test'}, timeout=120)
     resp.raise_for_status()
     emb = resp.json().get('embedding', [])
     print(f'OK:{len(emb)}')
@@ -105,11 +106,11 @@ except Exception as e:
 
 if echo "$EMBED_TEST" | grep -q "^OK:"; then
   DIM=$(echo "$EMBED_TEST" | sed 's/OK://')
-  echo "  ✅ Embedding generation working (${DIM} dimensions)"
+  echo "  ✅ Embedding generation working (model=${EMBED_MODEL}, ${DIM} dimensions)"
 else
   echo "  ❌ Cannot generate embeddings from container"
   echo "     Error: $EMBED_TEST"
-  echo "     Ensure Ollama is running with nomic-embed-text model"
+  echo "     Ensure Ollama is running with ${EMBED_MODEL} model"
   exit 1
 fi
 echo ""
@@ -218,16 +219,17 @@ if [ "$CREATED_ID" = "$FUNCTION_ID" ]; then
 else
   echo "  ⚠️  API registration issue. Updating directly in database..."
   _docker exec openwebui python3 -c "
-import sqlite3, json
+import sqlite3, json, time
 code = open('/dev/stdin').read()
+now_ts = int(time.time())
 conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
 cur.execute('SELECT id FROM function WHERE id=?', ('${FUNCTION_ID}',))
 if cur.fetchone():
-    cur.execute('UPDATE function SET content=?, is_active=1, is_global=1 WHERE id=?', (code, '${FUNCTION_ID}'))
+    cur.execute('UPDATE function SET content=?, is_active=1, is_global=1, updated_at=? WHERE id=?', (code, now_ts, '${FUNCTION_ID}'))
 else:
-    meta = json.dumps({'description': 'Retrieves relevant business context from pgvector and injects into prompts', 'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.1.0', 'type': 'filter'}})
-    cur.execute('INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, datetime("now"), datetime("now"))', ('${FUNCTION_ID}', 'system', 'Business Knowledge RAG', 'filter', code, meta))
+    meta = json.dumps({'description': 'Retrieves relevant business context from pgvector and injects into prompts', 'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.2.0', 'type': 'filter'}})
+    cur.execute('INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)', ('${FUNCTION_ID}', 'system', 'Business Knowledge RAG', 'filter', code, meta, now_ts, now_ts))
 conn.commit()
 conn.close()
 print('OK')
@@ -242,9 +244,57 @@ fi
 echo ""
 
 # ==========================================
-# STEP 6 — Enable function globally
+# STEP 6 — Sync valves (embedding model, top_k, active_client)
 # ==========================================
-echo "=== STEP 6 — Enable function globally ==="
+echo "=== STEP 6 — Sync function valves ==="
+
+VALVES_JSON=$(python3 -c "
+import json
+valves = {
+    'embedding_model': '${EMBEDDING_MODEL:-nomic-embed-text}',
+    'active_client': '${ACTIVE_CLIENT:-}',
+    'top_k': 8
+}
+print(json.dumps(valves))
+")
+
+_docker exec openwebui python3 -c "
+import sqlite3, sys
+valves = sys.argv[1]
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('UPDATE function SET valves=? WHERE id=?', (valves, '${FUNCTION_ID}'))
+conn.commit()
+conn.close()
+print('OK')
+" "$VALVES_JSON" 2>&1
+
+echo "  ✅ Valves synced: embedding_model=${EMBEDDING_MODEL:-nomic-embed-text}, active_client=${ACTIVE_CLIENT:-auto}"
+echo ""
+
+# ==========================================
+# STEP 7 — Sync WebUI native RAG config
+# ==========================================
+echo "=== STEP 7 — Sync WebUI native RAG embedding config ==="
+
+_docker exec openwebui python3 -c '
+import sqlite3, json, time
+conn = sqlite3.connect("/app/backend/data/webui.db")
+cur = conn.cursor()
+now = int(time.time())
+cur.execute("UPDATE config SET value = json(?), updated_at = ? WHERE key = ?", (json.dumps("ollama"), now, "rag.embedding_engine"))
+cur.execute("UPDATE config SET value = json(?), updated_at = ? WHERE key = ?", (json.dumps("'"${EMBED_MODEL}"'"), now, "rag.embedding_model"))
+conn.commit()
+conn.close()
+' 2>&1
+
+echo "  ✅ WebUI native RAG set to: engine=ollama, model=${EMBED_MODEL}"
+echo ""
+
+# ==========================================
+# STEP 8 — Enable function globally
+# ==========================================
+echo "=== STEP 8 — Enable function globally ==="
 
 # Toggle function on
 TOGGLE_RESPONSE=$(curl -s -X POST "${WEBUI_URL}/api/v1/functions/${FUNCTION_ID}/toggle" \
@@ -268,20 +318,20 @@ echo "  ✅ Set as global filter"
 echo ""
 
 # ==========================================
-# STEP 7 — End-to-end test
+# STEP 9 — End-to-end test
 # ==========================================
-echo "=== STEP 7 — End-to-end RAG test ==="
+echo "=== STEP 9 — End-to-end RAG test ==="
 
 E2E_TEST=$(_docker exec openwebui python3 -c "
 import psycopg2
 import requests
 
 # Get embedding for test query
-resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': 'nomic-embed-text', 'prompt': 'Tell me about this business'}, timeout=120)
+resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model': '${EMBED_MODEL}', 'prompt': 'Tell me about this business'}, timeout=120)
 embedding = resp.json()['embedding']
 
 # Query pgvector
-conn = psycopg2.connect(host='host.docker.internal', port=5432, user='admin', password='strongpassword', dbname='businessassistant')
+conn = psycopg2.connect(host='host.docker.internal', port=5432, user='${PG_USER:-admin}', password='${PG_PASSWORD:-strongpassword}', dbname='${PG_DATABASE:-businessassistant}')
 cur = conn.cursor()
 cur.execute('''
     SELECT source_path, chunk_text, 1 - (embedding <=> %s::vector) AS similarity
@@ -321,7 +371,7 @@ echo "  Function enabled:       ✅"
 echo ""
 echo "  HOW IT WORKS:"
 echo "    1. You edit files in Obsidian (native app, vault: current-client/)"
-echo "    2. Re-index: source vector-db/venv/bin/activate && python vector-db/index_vault.py"
+echo "    2. Re-index: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
 echo "    3. Ask questions in Open WebUI (localhost:3000)"
 echo "    4. The RAG filter automatically injects relevant business context"
 echo ""
@@ -329,5 +379,5 @@ echo "  TEST IT:"
 echo "    Ask a question about your business in the chat — it should answer from BUSINESS_KNOWLEDGE.md"
 echo ""
 echo "  NOTE: After editing files in Obsidian, re-run the indexer to update RAG:"
-echo "    source vector-db/venv/bin/activate && python vector-db/index_vault.py"
+echo "    ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
 echo ""

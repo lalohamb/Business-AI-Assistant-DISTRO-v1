@@ -25,7 +25,7 @@ DRY_RUN=true sudo ./admin/quickstart.sh
 | 1 | install.sh | Docker, Ollama, PostgreSQL, n8n, Open WebUI |
 | 2 | configure_credentials.sh | Creates Google OAuth2 credentials in n8n |
 | 3 | configure_n8n.sh | Imports and activates workflows |
-| 4 | post_install_client_setup.sh | Creates client vault from template |
+| 4 | post_install_client_setup.sh | Creates client documents from template |
 | 5 | switch_client.sh | Activates a client |
 | 6 | index_vault.py | Indexes client vault into RAG |
 | 7 | post_install_verify.sh | Validates everything is working |

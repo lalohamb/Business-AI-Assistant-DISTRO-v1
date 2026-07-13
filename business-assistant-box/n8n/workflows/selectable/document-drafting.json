@@ -42,13 +42,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a document drafting assistant for a small business. Generate a professional document based on the following request.\\n\\nDocument type: ' + $json.body.document_type + '\\nRecipient: ' + ($json.body.recipient || 'N/A') + '\\nSubject/Purpose: ' + $json.body.purpose + '\\nKey details: ' + ($json.body.details || 'None provided') + '\\n\\nBusiness templates/context:\\n' + ($json.templates || 'No templates available') + '\\n\\nGenerate the complete document text. Use professional formatting. Include placeholders like [DATE], [SIGNATURE] where appropriate.' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a document drafting assistant for a small business. Generate a professional document based on the following request.\\n\\nDocument type: ' + $json.body.document_type + '\\nRecipient: ' + ($json.body.recipient || 'N/A') + '\\nSubject/Purpose: ' + $json.body.purpose + '\\nKey details: ' + ($json.body.details || 'None provided') + '\\n\\nBusiness templates/context:\\n' + ($json.templates || 'No templates available') + '\\n\\nGenerate the complete document text. Use professional formatting. Include placeholders like [DATE], [SIGNATURE] where appropriate.', stream: false }) }}"
       },
-      "id": "gemini-draft",
-      "name": "Gemini \u2014 Draft Document",
+      "id": "ollama-draft",
+      "name": "Ollama \u2014 Draft Document",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -62,7 +62,7 @@
         "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'document_draft', document_type: $json.body.document_type, draft: $json.candidates[0].content.parts[0].text, recipient: $json.body.recipient, requires_approval: true }) }}"
+        "jsonBody": "={{ JSON.stringify({ type: 'document_draft', document_type: $json.body.document_type, draft: $json.response, recipient: $json.body.recipient, requires_approval: true }) }}"
       },
       "id": "send-approval",
       "name": "Send for Approval",
@@ -76,7 +76,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: true, status: 'draft_pending_approval', document_type: $json.body.document_type, preview: $json.candidates?.[0]?.content?.parts?.[0]?.text?.substring(0, 200) + '...' }) }}"
+        "responseBody": "={{ JSON.stringify({ success: true, status: 'draft_pending_approval', document_type: $json.body.document_type, preview: $json.response?.substring(0, 200) + '...' }) }}"
       },
       "id": "respond",
       "name": "Respond \u2014 Draft Created",
@@ -104,14 +104,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Draft Document",
+            "node": "Ollama \u2014 Draft Document",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Draft Document": {
+    "Ollama \u2014 Draft Document": {
       "main": [
         [
           {

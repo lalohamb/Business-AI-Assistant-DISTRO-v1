@@ -304,17 +304,17 @@ if [ "$OBSIDIAN_ENABLED" = "true" ]; then
     echo "  Install with: wget https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/obsidian_1.8.9_amd64.deb -O /tmp/obsidian.deb && sudo dpkg -i /tmp/obsidian.deb"
   fi
 
-  # Check vault directory exists and has .md files
-  VAULT_PATH="$BASE_PATH/current-client"
-  if [ -d "$VAULT_PATH" ]; then
-    MD_COUNT=$(find -L "$VAULT_PATH" -name "*.md" 2>/dev/null | wc -l)
+  # Check client directory exists and has .md files
+  CLIENT_DIR="$BASE_PATH/current-client"
+  if [ -d "$CLIENT_DIR" ]; then
+    MD_COUNT=$(find -L "$CLIENT_DIR" -name "*.md" 2>/dev/null | wc -l)
     if [ "$MD_COUNT" -gt 0 ]; then
-      pass "Vault directory has $MD_COUNT .md files: $VAULT_PATH"
+      pass "Client directory has $MD_COUNT .md files: $CLIENT_DIR"
     else
-      warn "Vault directory exists but contains no .md files"
+      warn "Client directory exists but contains no .md files"
     fi
   else
-    fail "Vault directory not found: $VAULT_PATH"
+    fail "Client directory not found: $CLIENT_DIR"
   fi
 else
   echo "  Obsidian disabled in .env. Skipping."
@@ -368,14 +368,140 @@ if [ $FAIL -eq 0 ]; then
   echo "  n8n:         http://localhost:5678"
   echo "  PostgreSQL:  localhost:5432"
   echo "  Obsidian:    obsidian & (native app)"
-  echo ""
-  exit 0
 else
   echo "  ❌ $FAIL TEST(S) FAILED"
   echo ""
   echo "  Common fixes:"
   echo "    - Ollama not on 0.0.0.0: sudo sed -i '/OLLAMA_HOST/d' /etc/systemd/system/ollama.service && sudo sed -i '/\\[Service\\]/a Environment=\"OLLAMA_HOST=0.0.0.0\"' /etc/systemd/system/ollama.service && sudo systemctl daemon-reload && sudo systemctl restart ollama"
   echo "    - WebUI can't reach Ollama: sudo docker stop openwebui && sudo docker rm openwebui && sudo docker run -d --name openwebui --restart unless-stopped --add-host=host.docker.internal:host-gateway -e OLLAMA_BASE_URL=http://host.docker.internal:11434 -p 3000:8080 -v $BASE_PATH/dashboard:/app/backend/data ghcr.io/open-webui/open-webui:main"
-  echo ""
+fi
+
+# ==========================================
+# DETAILED BUILD REPORT
+# ==========================================
+echo ""
+echo "========================================"
+echo "         DETAILED BUILD REPORT"
+echo "========================================"
+
+# .env Configuration
+echo ""
+echo "── .env Configuration ──────────────────"
+if [ -f "$BASE_PATH/.env" ]; then
+  grep -v '^\s*#' "$BASE_PATH/.env" | grep -v '^\s*$' | while IFS='=' read -r key val; do
+    case "$key" in
+      *KEY*|*PASSWORD*|*SECRET*) val="****" ;;
+    esac
+    printf "  %-35s %s\n" "$key" "$val"
+  done
+else
+  echo "  .env file not found"
+fi
+
+# Port allocation
+echo ""
+echo "── Ports ───────────────────────────────"
+printf "  %-14s %-7s %s\n" "Service" "Port" "Status"
+printf "  %-14s %-7s %s\n" "──────────" "─────" "──────"
+for svc_port in "PostgreSQL:5432" "OpenWebUI:3000" "n8n:5678" "Ollama:11434"; do
+  svc="${svc_port%%:*}"
+  port="${svc_port##*:}"
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    printf "  %-14s %-7s ✅ listening\n" "$svc" "$port"
+  else
+    printf "  %-14s %-7s ❌ not listening\n" "$svc" "$port"
+  fi
+done
+
+# Docker container status
+echo ""
+echo "── Docker Containers ───────────────────"
+if command -v docker &>/dev/null && (docker info &>/dev/null || sudo docker info &>/dev/null); then
+  printf "  %-14s %-12s %-28s %s\n" "Name" "Status" "Image" "Started"
+  printf "  %-14s %-12s %-28s %s\n" "──────────" "────────" "─────────────" "───────"
+  for cname in postgres openwebui n8n; do
+    cstatus=$(_docker inspect --format '{{.State.Status}}' "$cname" 2>/dev/null || echo "missing")
+    cimage=$(_docker inspect --format '{{.Config.Image}}' "$cname" 2>/dev/null | rev | cut -d/ -f1 | rev || echo "-")
+    cuptime=$(_docker inspect --format '{{.State.StartedAt}}' "$cname" 2>/dev/null | cut -dT -f1 || echo "-")
+    printf "  %-14s %-12s %-28s %s\n" "$cname" "$cstatus" "$cimage" "$cuptime"
+  done
+else
+  echo "  Docker not available"
+fi
+
+# RAG pipeline
+echo ""
+echo "── RAG Pipeline ────────────────────────"
+SUMMARY_CHUNKS=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM rag_chunks" 2>/dev/null | tr -d ' ')
+SUMMARY_CLIENT="${ACTIVE_CLIENT:-$(grep '^ACTIVE_CLIENT=' "$BASE_PATH/.env" 2>/dev/null | cut -d= -f2)}"
+SUMMARY_EMB="${EMBEDDING_MODEL:-$(grep '^EMBEDDING_MODEL=' "$BASE_PATH/.env" 2>/dev/null | cut -d= -f2)}"
+printf "  %-20s %s\n" "Chunks indexed:" "${SUMMARY_CHUNKS:-?}"
+printf "  %-20s %s\n" "Active client:" "$SUMMARY_CLIENT"
+printf "  %-20s %s\n" "Embedding model:" "$SUMMARY_EMB"
+echo -n "  Filter status:      "
+FILTER_STATUS=$(_docker exec -i openwebui python3 -c "
+import sqlite3
+c=sqlite3.connect('/app/backend/data/webui.db').cursor()
+c.execute(\"SELECT is_active,is_global FROM function WHERE id='business_knowledge_rag'\")
+r=c.fetchone()
+print(f'active={r[0]} global={r[1]}') if r else print('not registered')
+" 2>/dev/null)
+echo "${FILTER_STATUS:-unknown}"
+
+# Obsidian
+echo ""
+echo "── Obsidian ────────────────────────────"
+echo -n "  Installed:          "
+if command -v obsidian &>/dev/null; then
+  echo "✅ yes"
+else
+  echo "❌ no"
+fi
+printf "  %-20s %s\n" "Enabled (.env):" "${OBSIDIAN_ENABLED:-false}"
+VAULT_TARGET=$(readlink -f "$BASE_PATH/current-client" 2>/dev/null || echo "$BASE_PATH/current-client")
+printf "  %-20s %s\n" "Vault path:" "$VAULT_TARGET"
+if [ -d "$VAULT_TARGET" ]; then
+  MD_COUNT=$(find -L "$VAULT_TARGET" -name "*.md" 2>/dev/null | wc -l)
+  printf "  %-20s %s\n" "Vault .md files:" "$MD_COUNT"
+else
+  printf "  %-20s %s\n" "Vault .md files:" "directory not found"
+fi
+
+# Ollama models
+echo ""
+echo "── Ollama Models ───────────────────────"
+if command -v ollama &>/dev/null; then
+  ollama list 2>/dev/null | head -10 | sed 's/^/  /'
+else
+  echo "  Ollama not installed"
+fi
+
+# Disk usage
+echo ""
+echo "── Disk Usage ──────────────────────────"
+printf "  %-25s %s\n" "Project total:" "$(du -sh "$BASE_PATH" 2>/dev/null | cut -f1)"
+printf "  %-25s %s\n" "PostgreSQL data:" "$(du -sh "$BASE_PATH/postgres/data" 2>/dev/null | cut -f1)"
+printf "  %-25s %s\n" "Ollama models:" "$(du -sh /usr/share/ollama/.ollama/models 2>/dev/null | cut -f1 || echo 'N/A')"
+printf "  %-25s %s\n" "Python venv:" "$(du -sh "$BASE_PATH/vector-db/venv" 2>/dev/null | cut -f1)"
+
+# System info
+echo ""
+echo "── System ──────────────────────────────"
+printf "  %-18s %s\n" "OS:" "$(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')"
+printf "  %-18s %s\n" "Kernel:" "$(uname -r)"
+printf "  %-18s %s\n" "RAM:" "$(free -h | awk '/Mem:/{print $2}') total, $(free -h | awk '/Mem:/{print $7}') available"
+printf "  %-18s %s\n" "GPU:" "$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo 'None detected')"
+printf "  %-18s %s\n" "Docker:" "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
+printf "  %-18s %s\n" "Python:" "$(python3 --version 2>/dev/null)"
+
+echo ""
+echo "========================================"
+echo "         END OF BUILD REPORT"
+echo "========================================"
+echo ""
+
+if [ $FAIL -eq 0 ]; then
+  exit 0
+else
   exit 1
 fi

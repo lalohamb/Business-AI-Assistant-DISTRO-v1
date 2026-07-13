@@ -45,13 +45,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a social media content creator for a small business. Generate a social media post based on the business context below. The post should be:\\n- Professional but approachable\\n- Under 280 characters for the main text\\n- Include a call-to-action\\n- Relevant to the business services\\n\\nBusiness context:\\n' + JSON.stringify($json.chunks || []) + '\\n\\nToday is: ' + new Date().toLocaleDateString('en-US', { weekday: 'long' }) + '\\n\\nRespond in JSON: {\"platform\": \"google_business\", \"text\": \"...\", \"hashtags\": [...], \"suggested_image_description\": \"...\", \"best_post_time\": \"...\"}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a social media content creator for a small business. Generate a social media post based on the business context below. The post should be:\\n- Professional but approachable\\n- Under 280 characters for the main text\\n- Include a call-to-action\\n- Relevant to the business services\\n\\nBusiness context:\\n' + JSON.stringify($json.chunks || []) + '\\n\\nToday is: ' + new Date().toLocaleDateString('en-US', { weekday: 'long' }) + '\\n\\nRespond in JSON: {\"platform\": \"google_business\", \"text\": \"...\", \"hashtags\": [...], \"suggested_image_description\": \"...\", \"best_post_time\": \"...\"}', stream: false }) }}"
       },
-      "id": "gemini-generate",
-      "name": "Gemini \u2014 Generate Post",
+      "id": "ollama-generate",
+      "name": "Ollama \u2014 Generate Post",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -117,14 +117,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Generate Post",
+            "node": "Ollama \u2014 Generate Post",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Generate Post": {
+    "Ollama \u2014 Generate Post": {
       "main": [
         [
           {

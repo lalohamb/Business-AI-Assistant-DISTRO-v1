@@ -97,7 +97,7 @@ What it does:
 ## .env Variables
 
 ```
-ACTIVE_CLIENT=law-office
+ACTIVE_CLIENT=insurance-agency
 OBSIDIAN_VAULT_PATH=<BASE_PATH>/current-client
 OPENCLAW_WORKSPACE_PATH=<BASE_PATH>/openclaw
 ```
@@ -111,12 +111,10 @@ OPENCLAW_WORKSPACE_PATH=<BASE_PATH>/openclaw
 `index_vault.py` reads `ACTIVE_CLIENT` from .env and indexes:
 - `system/`
 - `clients/{ACTIVE_CLIENT}/`
-- `vault/`
 
 After switching clients, re-index:
 ```bash
-source vector-db/venv/bin/activate
-ACTIVE_CLIENT=new-client python3 vector-db/index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 ---
@@ -140,7 +138,6 @@ These directories contain operational data, not information the AI should use to
 ```
 ./admin/list_clients.sh                    # See available clients
 ./admin/validate_client.sh acme-roofing    # Check it's ready
-./admin/switch_client.sh acme-roofing      # Switch
+./admin/switch_client.sh acme-roofing      # Switch (auto re-indexes RAG)
 ./admin/pre_check.sh                       # Verify system state
-python3 vector-db/index_vault.py           # Re-index RAG
 ```

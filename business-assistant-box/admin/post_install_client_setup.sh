@@ -110,7 +110,7 @@ print_summary() {
   echo ""
   echo "  Next steps:"
   echo "    1. Edit CLIENT_PROFILE.md, BUSINESS_KNOWLEDGE.md, FAQ.md for each client"
-  echo "    2. Add business documents to vault/"
+  echo "    2. Add business documents to clients/<name>/DOCUMENTS/"
   echo "    3. Re-run this script to re-index"
   echo "    4. Run pre_check.sh with ACTIVE_CLIENT=<client-name>"
   echo ""
@@ -161,7 +161,7 @@ echo ""
 
 if [ "$DRY_RUN" = true ]; then
   echo "[DRY RUN] Would prompt for client names"
-  CLIENT_LIST="demo-company"
+  CLIENT_LIST="${ACTIVE_CLIENT:-demo-company}"
 else
   read -p "Enter client names to onboard (comma-separated, e.g. acme-roofing,law-office): " CLIENT_LIST
 fi
@@ -271,27 +271,29 @@ echo ""
 
 for client in "${CLIENTS[@]}"; do
   client=$(echo "$client" | xargs)
-  VAULT_CLIENT="$BASE/vault/$client"
+  CLIENT_DOCS="$BASE/clients/$client/DOCUMENTS"
 
-  echo "Client vault: $client"
+  echo "Client documents: $client"
 
   if [ "$DRY_RUN" = true ]; then
-    echo "  [DRY RUN] Would create: $VAULT_CLIENT/{documents,contracts,financials,uploads}"
-    VAULT_DIRS_CREATED+=("$VAULT_CLIENT")
+    echo "  [DRY RUN] Would create: $CLIENT_DOCS/{contracts,handbooks,financials,uploads,websites,company-documents}"
+    VAULT_DIRS_CREATED+=("$CLIENT_DOCS")
     continue
   fi
 
-  mkdir -p "$VAULT_CLIENT/documents"
-  mkdir -p "$VAULT_CLIENT/contracts"
-  mkdir -p "$VAULT_CLIENT/financials"
-  mkdir -p "$VAULT_CLIENT/uploads"
+  mkdir -p "$CLIENT_DOCS/contracts"
+  mkdir -p "$CLIENT_DOCS/handbooks"
+  mkdir -p "$CLIENT_DOCS/financials"
+  mkdir -p "$CLIENT_DOCS/uploads"
+  mkdir -p "$CLIENT_DOCS/websites"
+  mkdir -p "$CLIENT_DOCS/company-documents"
 
-  log_ok "Vault created: $VAULT_CLIENT"
-  VAULT_DIRS_CREATED+=("$VAULT_CLIENT")
+  log_ok "Documents created: $CLIENT_DOCS"
+  VAULT_DIRS_CREATED+=("$CLIENT_DOCS")
   echo ""
 done
 
-prompt_phase "PHASE 3 — Create Client Vault Directories"
+prompt_phase "PHASE 3 — Create Client Document Directories"
 
 # ==========================================
 # PHASE 4 — Update .env for Active Client
@@ -443,7 +445,7 @@ else
     echo "Indexing client: $client"
 
     if [ "$DRY_RUN" = true ]; then
-      echo "  [DRY RUN] Would run: ACTIVE_CLIENT=$client python vector-db/index_vault.py"
+      echo "  [DRY RUN] Would run: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
       INDEXED_CLIENTS+=("$client (dry run)")
       continue
     fi
@@ -454,7 +456,7 @@ else
       (
         cd "$BASE"
         source "$RAG_VENV/bin/activate"
-        ACTIVE_CLIENT="$client" python3 vector-db/index_vault.py
+        ACTIVE_CLIENT="$client" "$BASE/vector-db/venv/bin/python3" "$BASE/vector-db/index_vault.py"
         deactivate
       ) && {
         log_ok "Indexed: $client"

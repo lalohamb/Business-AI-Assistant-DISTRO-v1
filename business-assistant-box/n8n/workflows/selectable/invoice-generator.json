@@ -21,13 +21,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Generate a professional invoice based on the following details. Return as JSON.\\n\\nClient: ' + $json.body.client_name + '\\nClient email: ' + ($json.body.client_email || '') + '\\nServices performed: ' + JSON.stringify($json.body.line_items || []) + '\\nPayment terms: ' + ($json.body.payment_terms || 'Net 30') + '\\nNotes: ' + ($json.body.notes || '') + '\\n\\nRespond in JSON: {\"invoice_number\": \"INV-YYYYMMDD-001\", \"date\": \"...\", \"due_date\": \"...\", \"client\": {\"name\": \"...\", \"email\": \"...\"}, \"line_items\": [{\"description\": \"...\", \"quantity\": 1, \"rate\": 0, \"amount\": 0}], \"subtotal\": 0, \"tax\": 0, \"total\": 0, \"payment_terms\": \"...\", \"email_body\": \"...\"}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Generate a professional invoice based on the following details. Return as JSON.\\n\\nClient: ' + $json.body.client_name + '\\nClient email: ' + ($json.body.client_email || '') + '\\nServices performed: ' + JSON.stringify($json.body.line_items || []) + '\\nPayment terms: ' + ($json.body.payment_terms || 'Net 30') + '\\nNotes: ' + ($json.body.notes || '') + '\\n\\nRespond in JSON: {\"invoice_number\": \"INV-YYYYMMDD-001\", \"date\": \"...\", \"due_date\": \"...\", \"client\": {\"name\": \"...\", \"email\": \"...\"}, \"line_items\": [{\"description\": \"...\", \"quantity\": 1, \"rate\": 0, \"amount\": 0}], \"subtotal\": 0, \"tax\": 0, \"total\": 0, \"payment_terms\": \"...\", \"email_body\": \"...\"}', stream: false }) }}"
       },
-      "id": "gemini-invoice",
-      "name": "Gemini \u2014 Generate Invoice",
+      "id": "ollama-invoice",
+      "name": "Ollama \u2014 Generate Invoice",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -105,14 +105,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Generate Invoice",
+            "node": "Ollama \u2014 Generate Invoice",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Generate Invoice": {
+    "Ollama \u2014 Generate Invoice": {
       "main": [
         [
           {

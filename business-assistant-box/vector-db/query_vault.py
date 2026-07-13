@@ -17,11 +17,11 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "user": "admin",
-    "password": "strongpassword",
-    "dbname": "businessassistant",
+    "host": os.getenv("PG_HOST", "localhost"),
+    "port": int(os.getenv("PG_PORT", "5432")),
+    "user": os.getenv("PG_USER", "admin"),
+    "password": os.getenv("PG_PASSWORD", "strongpassword"),
+    "dbname": os.getenv("PG_DATABASE", "businessassistant"),
 }
 
 

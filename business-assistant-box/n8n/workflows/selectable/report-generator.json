@@ -81,13 +81,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Generate a weekly business report for a small business owner. Include:\\n\\n1. EXECUTIVE SUMMARY (2-3 sentences)\\n2. KEY METRICS \u2014 compare to previous week if data available\\n3. AI ASSISTANT USAGE \u2014 how the AI helped this week\\n4. RECOMMENDATIONS \u2014 3 actionable items for next week\\n5. ALERTS \u2014 anything that needs immediate attention\\n\\nBusiness metrics data: ' + JSON.stringify($json.metrics || {}) + '\\nAI usage stats: ' + JSON.stringify($json.ai_usage || {}) + '\\nWeek ending: ' + new Date().toISOString().split('T')[0] + '\\n\\nFormat as a clean, professional report. Keep under 500 words.' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Generate a weekly business report for a small business owner. Include:\\n\\n1. EXECUTIVE SUMMARY (2-3 sentences)\\n2. KEY METRICS \u2014 compare to previous week if data available\\n3. AI ASSISTANT USAGE \u2014 how the AI helped this week\\n4. RECOMMENDATIONS \u2014 3 actionable items for next week\\n5. ALERTS \u2014 anything that needs immediate attention\\n\\nBusiness metrics data: ' + JSON.stringify($json.metrics || {}) + '\\nAI usage stats: ' + JSON.stringify($json.ai_usage || {}) + '\\nWeek ending: ' + new Date().toISOString().split('T')[0] + '\\n\\nFormat as a clean, professional report. Keep under 500 words.', stream: false }) }}"
       },
-      "id": "gemini-report",
-      "name": "Gemini \u2014 Generate Report",
+      "id": "ollama-report",
+      "name": "Ollama \u2014 Generate Report",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -101,7 +101,7 @@
         "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'weekly_report_email', report: $json.candidates[0].content.parts[0].text, week_ending: new Date().toISOString().split('T')[0], requires_approval: false }) }}"
+        "jsonBody": "={{ JSON.stringify({ type: 'weekly_report_email', report: $json.response, week_ending: new Date().toISOString().split('T')[0], requires_approval: false }) }}"
       },
       "id": "deliver-report",
       "name": "Deliver Report",
@@ -156,14 +156,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Generate Report",
+            "node": "Ollama \u2014 Generate Report",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Generate Report": {
+    "Ollama \u2014 Generate Report": {
       "main": [
         [
           {

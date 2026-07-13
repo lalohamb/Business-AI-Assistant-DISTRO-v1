@@ -81,13 +81,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Summarize this pending approval for a business owner in 2-3 sentences. Make it clear what action is being requested and why it needs approval:\\n\\nType: ' + $json.type + '\\nPayload: ' + $json.payload }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Summarize this pending approval for a business owner in 2-3 sentences. Make it clear what action is being requested and why it needs approval:\\n\\nType: ' + $json.type + '\\nPayload: ' + $json.payload, stream: false }) }}"
       },
-      "id": "gemini-summarize",
-      "name": "Gemini \u2014 Summarize for Owner",
+      "id": "ollama-summarize",
+      "name": "Ollama \u2014 Summarize for Owner",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -98,7 +98,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: true, approval_id: $json.approval_id, status: 'pending', summary: $json.candidates?.[0]?.content?.parts?.[0]?.text || 'Approval queued' }) }}"
+        "responseBody": "={{ JSON.stringify({ success: true, approval_id: $json.approval_id, status: 'pending', summary: $json.response || 'Approval queued' }) }}"
       },
       "id": "respond-pending",
       "name": "Respond \u2014 Pending",
@@ -158,14 +158,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Summarize for Owner",
+            "node": "Ollama \u2014 Summarize for Owner",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Summarize for Owner": {
+    "Ollama \u2014 Summarize for Owner": {
       "main": [
         [
           {

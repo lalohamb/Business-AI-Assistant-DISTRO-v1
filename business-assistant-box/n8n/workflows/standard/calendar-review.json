@@ -66,13 +66,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a calendar assistant for a small business owner. Review today\\'s schedule and provide:\\n1. Summary of the day\\n2. Any scheduling conflicts\\n3. Suggested prep for each meeting\\n4. Gaps that could be used productively\\n\\nToday\\'s events:\\n' + JSON.stringify($json.items || []) + '\\n\\nRespond in JSON: {\"summary\": \"...\", \"conflicts\": [...], \"prep_notes\": [...], \"available_gaps\": [...], \"recommendations\": [...]}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a calendar assistant for a small business owner. Review today\\'s schedule and provide:\\n1. Summary of the day\\n2. Any scheduling conflicts\\n3. Suggested prep for each meeting\\n4. Gaps that could be used productively\\n\\nToday\\'s events:\\n' + JSON.stringify($json.items || []) + '\\n\\nRespond in JSON: {\"summary\": \"...\", \"conflicts\": [...], \"prep_notes\": [...], \"available_gaps\": [...], \"recommendations\": [...]}', stream: false }) }}"
       },
-      "id": "gemini-review",
-      "name": "Gemini \u2014 Review Schedule",
+      "id": "ollama-review",
+      "name": "Ollama \u2014 Review Schedule",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -162,14 +162,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Review Schedule",
+            "node": "Ollama \u2014 Review Schedule",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Review Schedule": {
+    "Ollama \u2014 Review Schedule": {
       "main": [
         [
           {

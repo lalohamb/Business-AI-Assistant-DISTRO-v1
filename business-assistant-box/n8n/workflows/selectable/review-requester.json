@@ -21,13 +21,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'Write a short, friendly email asking a customer to leave a Google review after their service was completed. Keep it under 80 words. Be genuine, not salesy.\\n\\nCustomer name: ' + $json.body.customer_name + '\\nService completed: ' + $json.body.service_completed + '\\nCompletion date: ' + ($json.body.completion_date || 'today') + '\\nBusiness name: ' + ($json.body.business_name || 'our business') + '\\nGoogle review link: ' + ($json.body.review_link || '[REVIEW_LINK]') + '\\n\\nRespond in JSON: {\"subject\": \"...\", \"body\": \"...\", \"send_delay_hours\": 24}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Write a short, friendly email asking a customer to leave a Google review after their service was completed. Keep it under 80 words. Be genuine, not salesy.\\n\\nCustomer name: ' + $json.body.customer_name + '\\nService completed: ' + $json.body.service_completed + '\\nCompletion date: ' + ($json.body.completion_date || 'today') + '\\nBusiness name: ' + ($json.body.business_name || 'our business') + '\\nGoogle review link: ' + ($json.body.review_link || '[REVIEW_LINK]') + '\\n\\nRespond in JSON: {\"subject\": \"...\", \"body\": \"...\", \"send_delay_hours\": 24}', stream: false }) }}"
       },
-      "id": "gemini-draft",
-      "name": "Gemini \u2014 Draft Review Request",
+      "id": "ollama-draft",
+      "name": "Ollama \u2014 Draft Review Request",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -72,14 +72,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Draft Review Request",
+            "node": "Ollama \u2014 Draft Review Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Draft Review Request": {
+    "Ollama \u2014 Draft Review Request": {
       "main": [
         [
           {

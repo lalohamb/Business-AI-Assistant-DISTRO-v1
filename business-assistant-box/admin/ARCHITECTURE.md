@@ -58,7 +58,7 @@ GPU pinning: Ollama is locked to the RTX 2060 SUPER via `CUDA_VISIBLE_DEVICES` U
 | Component | Implementation |
 |-----------|----------------|
 | Client Knowledge | clients/{client}/ (markdown files) |
-| Shared Vault | vault/ (documents, contracts, financials) |
+| Client Documents | clients/{name}/DOCUMENTS/ (contracts, handbooks, financials) |
 | System Intelligence | system/ (AGENTS, POLICIES, IDENTITY, PROMPTS, TOOLS) |
 | Vector Storage | PostgreSQL rag_documents + rag_chunks tables |
 | Human Editing | Obsidian (pointed at current-client symlink) |
@@ -149,7 +149,7 @@ User edits in Obsidian (current-client → clients/{ACTIVE_CLIENT}/)
   ↓
 Files saved to disk
   ↓
-Run: ./venv/bin/python index_vault.py (from vector-db/)
+Run: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
   ↓
 Chunks embedded and stored in pgvector
   ↓
@@ -189,7 +189,7 @@ business-assistant-box/
 │   ├── acme-roofing/           # Acme Roofing & Exteriors (82 chunks)
 │   ├── law-office/             # Carter & Associates, PLLC (84 chunks)
 │   └── insurance-agency/       # Pinnacle Insurance Group (not yet indexed)
-├── vault/                      # Shared knowledge documents
+├── clients/                    # Per-client knowledge & documents
 │   ├── company-documents/
 │   ├── financials/
 │   ├── contracts/
@@ -343,7 +343,7 @@ All scripts and services read from `.env`. Key variables:
 | AI_PROVIDER | ollama | LLM provider |
 | OLLAMA_MODEL | qwen3:14b | Primary inference model |
 | EMBEDDING_MODEL | nomic-embed-text | Embedding model |
-| ACTIVE_CLIENT | law-office | Currently active client |
+| ACTIVE_CLIENT | (set by switch_client.sh) | Currently active client |
 | RAG_ENABLED | true | pgvector RAG active |
 | WORKFLOW_ENGINE | n8n | Automation engine |
 | OBSIDIAN_ENABLED | true | Knowledge editing enabled |

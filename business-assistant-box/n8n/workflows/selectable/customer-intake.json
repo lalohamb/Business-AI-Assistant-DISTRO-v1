@@ -21,13 +21,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a customer intake processor for a small business. Process the following new customer information and create a structured profile.\\n\\nRaw intake data:\\nName: ' + ($json.body.name || '') + '\\nEmail: ' + ($json.body.email || '') + '\\nPhone: ' + ($json.body.phone || '') + '\\nService requested: ' + ($json.body.service || '') + '\\nNotes: ' + ($json.body.notes || '') + '\\nSource: ' + ($json.body.source || 'direct') + '\\n\\nRespond in JSON: {\"profile\": {\"name\": \"...\", \"email\": \"...\", \"phone\": \"...\", \"service_category\": \"...\", \"priority\": \"high|medium|low\", \"next_steps\": [...], \"tags\": [...]}, \"welcome_email_draft\": \"...\", \"onboarding_tasks\": [...]}' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a customer intake processor for a small business. Process the following new customer information and create a structured profile.\\n\\nRaw intake data:\\nName: ' + ($json.body.name || '') + '\\nEmail: ' + ($json.body.email || '') + '\\nPhone: ' + ($json.body.phone || '') + '\\nService requested: ' + ($json.body.service || '') + '\\nNotes: ' + ($json.body.notes || '') + '\\nSource: ' + ($json.body.source || 'direct') + '\\n\\nRespond in JSON: {\"profile\": {\"name\": \"...\", \"email\": \"...\", \"phone\": \"...\", \"service_category\": \"...\", \"priority\": \"high|medium|low\", \"next_steps\": [...], \"tags\": [...]}, \"welcome_email_draft\": \"...\", \"onboarding_tasks\": [...]}', stream: false }) }}"
       },
-      "id": "gemini-process",
-      "name": "Gemini \u2014 Process Intake",
+      "id": "ollama-process",
+      "name": "Ollama \u2014 Process Intake",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -105,14 +105,14 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Process Intake",
+            "node": "Ollama \u2014 Process Intake",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Process Intake": {
+    "Ollama \u2014 Process Intake": {
       "main": [
         [
           {

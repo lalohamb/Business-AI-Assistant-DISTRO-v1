@@ -94,9 +94,9 @@ Notes: Multi-client switching operational via switch_client.sh. License upgraded
 | demo-company | 124 | ✅ Complete |
 | acme-roofing | 82 | ✅ Complete |
 | law-office | 84 | ✅ Active |
-| insurance-agency | — | ✅ Ready (not yet indexed) |
+| insurance-agency | 279 | ✅ Active (current) |
 
-Active Client: law-office
+Active Client: insurance-agency
 
 ---
 
@@ -115,30 +115,36 @@ Active Client: law-office
 ## Active Configuration
 
 - AI Provider: Ollama
-- LLM Model: qwen3:14b (configurable)
+- LLM Model: qwen3:14b (configurable via OLLAMA_MODEL env var)
 - Embedding Model: nomic-embed-text (768 dimensions)
-- Active Client: law-office
+- Active Client: insurance-agency
 - License Tier: multi (expires 2027-06-02)
-- RAG Enabled: true
-- Workflow Engine: n8n
+- RAG Enabled: true (top_k=8, anti-hallucination prefix)
+- System Prompt: Configured (persistent identity in Open WebUI)
+- Workflow Engine: n8n (all workflows use local Ollama)
 - Approval Required for Email: true
+- File Types Indexed: .md, .txt, .pdf, .docx, .xlsx, .csv, .html, .eml
 
 ---
 
-## Completed This Session
+## Completed This Session (2026-07-12)
 
-- ✅ Fixed license expiration and upgraded to multi-tier
-- ✅ Created demo data for acme-roofing (Acme Roofing & Exteriors)
-- ✅ Created demo data for insurance-agency (Pinnacle Insurance Group)
-- ✅ Created demo data for law-office (Carter & Associates, PLLC)
-- ✅ Fixed current-client symlink issue (was directory, caused Obsidian duplicates)
-- ✅ Removed stale demo-company symlink inside current-client
-- ✅ Indexed law-office into RAG (23 files, 84 chunks)
-- ✅ Created switch_client.md documentation
-- ✅ Created uninstall.md documentation
-- ✅ Extended COMMANDS.md with full command reference for all tech stacks
-- ✅ Updated NEW_MACHINE_SETUP.md with GPU requirements and dual-GPU configuration
-- ✅ Removed duplicate UNINSTALL.md
+- ✅ Fixed Open WebUI crash-loop (integer timestamps in SQLite)
+- ✅ Fixed RAG empty results (ivfflat index lists=16, auto-rebuild after indexing)
+- ✅ Fixed psycopg2 persistence (frontmatter requirements)
+- ✅ Set anti-hallucination RAG prefix
+- ✅ Increased top_k from 5 to 8
+- ✅ Configured persistent system prompt in Open WebUI
+- ✅ Added multi-format indexing (PDF, DOCX, XLSX, CSV, HTML, EML)
+- ✅ Converted all 16 n8n workflows from Gemini to local Ollama
+- ✅ Made workflow model configurable via OLLAMA_MODEL env var
+- ✅ Added sample documents to DOCUMENTS/ (carrier appointments, handbook, service agreement)
+- ✅ Populated TODAY.md and OPEN_TASKS.md with operational data
+- ✅ Added daily-briefing write-back to TODAY.md
+- ✅ Created sync_today.sh for cron-based TODAY.md sync
+- ✅ Created Ollama-to-Gemini.md documentation
+- ✅ Updated CHANGELOG.md, TROUBLESHOOTING.md, VAULT_INDEXING.md, WORKFLOW_SETUP.md
+- ✅ All 12 E2E tests passing
 
 ---
 
@@ -150,27 +156,30 @@ Active Client: law-office
 
 ## Open Issues
 
-- insurance-agency not yet indexed (switch and run index_vault.py)
-- No live email/calendar integration (n8n workflows need endpoint wiring)
+- No live email/calendar integration (n8n workflows need Google OAuth2 credentials wired)
 - Dashboard apps (Next.js) not actively running — using Open WebUI instead
 - OpenClaw deferred (no API key)
+- expense-tracker and voicemail-transcription lose multimodal features without Gemini
+- DOCUMENTS/ still mostly sample data — needs real business documents
+- sync_today.sh not yet added to crontab
 
 ---
 
 ## Next Milestones
 
-1. End-to-end workflow demo: trigger email triage or daily briefing through n8n with RAG context
-2. Index insurance-agency client
-3. Wire n8n workflows to live email (IMAP/SMTP or Google API)
+1. Wire n8n workflows to live email (Google OAuth2 credentials)
+2. Add real business documents to DOCUMENTS/ and re-index
+3. Add sync_today.sh to crontab for automated daily briefing persistence
 4. Test client switching in production with Obsidian vault reload
 5. Package for distribution (zip_package.sh)
+6. Consider HNSW index for larger document sets (>5000 chunks)
 
 ---
 
 ## Last Updated
 
-Date: 2026-07-10
+Date: 2026-07-12
 
-Updated By: Edward Hambrick
+Updated By: Amazon Q / Edward Hambrick
 
-Notes: Full status refresh after multi-client demo data creation, RAG indexing, documentation updates, and dual-GPU configuration documentation.
+Notes: Major fixes session — crash-loop fix, RAG pipeline improvements, all workflows converted to local Ollama, documentation overhaul. All 12 E2E tests passing.

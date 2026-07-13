@@ -34,7 +34,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "={{ 'SELECT title, chunk_text, source_path FROM rag_chunks ORDER BY embedding <=> ' + \"'\" + JSON.stringify($json.embedding) + \"'\" + '::vector LIMIT 5' }}",
+        "query": "={{ 'SELECT title, chunk_text, source_path FROM rag_chunks WHERE client_name = ' + \"'\" + ($('Ask Webhook').item.json.body.client_name || 'demo-company') + \"'\" + ' ORDER BY embedding <=> ' + \"'\" + JSON.stringify($json.embedding) + \"'\" + '::vector LIMIT 5' }}",
         "options": {}
       },
       "id": "pgvector-search",

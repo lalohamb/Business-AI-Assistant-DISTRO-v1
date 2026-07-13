@@ -64,10 +64,10 @@ Behavior:
 
 ### Phase 3 — Create Client Vault Directories
 
-Creates per-client vault storage:
+Creates per-client document storage:
 
 ```
-vault/<client-name>/
+clients/<client-name>/DOCUMENTS/
 ├── documents/
 ├── contracts/
 ├── financials/
@@ -100,8 +100,8 @@ Prerequisites checked:
 
 For each client:
 - Prompts before indexing
-- Runs `ACTIVE_CLIENT=<client> python3 vector-db/index_vault.py`
-- Indexes: system/, clients/<client>/, vault/
+- Runs `./vector-db/venv/bin/python3 ./vector-db/index_vault.py`
+- Indexes: system/, clients/<client>/
 
 ### Phase 7 — Verify RAG Ingest
 
@@ -172,8 +172,7 @@ After populating client files, re-run indexing:
 
 ```bash
 cd /home/lalo/Documents/.nativeblackbox/opt/business-assistant-box
-source vector-db/venv/bin/activate
-ACTIVE_CLIENT=<client-name> python3 vector-db/index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
 ```
 
 Or re-run the script — Phase 6 will prompt for each client.

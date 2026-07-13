@@ -37,7 +37,7 @@ SAFE_MODE=false ./admin/install.sh
 Creates directory structure and placeholder files.
 
 Directories created:
-- Root: admin/, system/, clients/, vault/, postgres/, vector-db/, dashboard/, n8n/, openclaw/, docker/, logs/, backups/
+- Root: admin/, system/, clients/, postgres/, vector-db/, dashboard/, n8n/, openclaw/, docker/, logs/, backups/
 - Vault: company-documents/, financials/, contracts/, handbooks/, websites/, uploads/
 - Clients: templates/, demo-company/, law-office/, insurance-agency/, acme-roofing/ — each with PROCEDURES/, MEMORY/, OUTPUTS/{drafts,reports,summaries}/
 
@@ -288,8 +288,8 @@ Excluded from indexing:
 Usage after install:
 ```bash
 cd vector-db
-./venv/bin/python index_vault.py
-./venv/bin/python query_vault.py "your question"
+./vector-db/venv/bin/python3 ./vector-db/index_vault.py
+./vector-db/venv/bin/python3 ./vector-db/query_vault.py "your question"
 ```
 
 ---
@@ -345,7 +345,7 @@ sudo ./admin/configure_rag_pipeline.sh  # Connect WebUI to RAG
 ./admin/configure_credentials.sh        # Create Google OAuth2 creds in n8n
 ./admin/configure_n8n.sh                # Test webhooks + generate report
 ./admin/switch_client.sh law-office     # Switch active client
-cd vector-db && ./venv/bin/python index_vault.py  # Index vault into RAG
+cd vector-db && ./vector-db/venv/bin/python3 ./vector-db/index_vault.py  # Index vault into RAG
 ```
 
 ---

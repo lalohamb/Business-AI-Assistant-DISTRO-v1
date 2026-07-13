@@ -53,14 +53,21 @@ _docker() {
   fi
 }
 
+TOTAL_TASKS=19
+
 prompt_user() {
   local phase_name="$1"
   local next_phase="$2"
   local notes="$3"
+  local task_num="$4"
 
   echo ""
   echo "========================================"
-  echo " $phase_name COMPLETE"
+  if [ -n "$task_num" ]; then
+    echo " [Task $task_num of $TOTAL_TASKS] $phase_name COMPLETE"
+  else
+    echo " $phase_name COMPLETE"
+  fi
   echo "========================================"
 
   if [ -n "$notes" ]; then
@@ -265,7 +272,7 @@ print_summary() {
   echo "  ./admin/post_install_verify.sh     # Verify all services connected"
   echo "  obsidian &                         # Launch Obsidian to edit vault"
   echo ""
-  echo "  After editing vault files, re-index:"
+  echo "  After editing client files, re-index:"
   echo "    ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
   echo ""
 
@@ -284,6 +291,127 @@ print_summary() {
   else
     echo "❌ Not found"
   fi
+
+  # ── DETAILED BUILD REPORT ──
+  echo ""
+  echo "========================================"
+  echo "         DETAILED BUILD REPORT"
+  echo "========================================"
+
+  # .env Configuration
+  echo ""
+  echo "── .env Configuration ──────────────────"
+  if [ -f "$BASE_PATH/.env" ]; then
+    grep -v '^\s*#' "$BASE_PATH/.env" | grep -v '^\s*$' | while IFS='=' read -r key val; do
+      case "$key" in
+        *KEY*|*PASSWORD*|*SECRET*) val="****" ;;
+      esac
+      printf "  %-35s %s\n" "$key" "$val"
+    done
+  else
+    echo "  .env file not found"
+  fi
+
+  # Port allocation
+  echo ""
+  echo "── Ports ───────────────────────────────"
+  printf "  %-14s %-7s %s\n" "Service" "Port" "Status"
+  printf "  %-14s %-7s %s\n" "──────────" "─────" "──────"
+  for svc_port in "PostgreSQL:5432" "OpenWebUI:3000" "n8n:5678" "Ollama:11434"; do
+    svc="${svc_port%%:*}"
+    port="${svc_port##*:}"
+    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+      printf "  %-14s %-7s ✅ listening\n" "$svc" "$port"
+    else
+      printf "  %-14s %-7s ❌ not listening\n" "$svc" "$port"
+    fi
+  done
+
+  # Docker container status
+  echo ""
+  echo "── Docker Containers ───────────────────"
+  if command -v docker &>/dev/null && (docker info &>/dev/null || sudo docker info &>/dev/null); then
+    printf "  %-14s %-12s %-28s %s\n" "Name" "Status" "Image" "Started"
+    printf "  %-14s %-12s %-28s %s\n" "──────────" "────────" "─────────────" "───────"
+    for cname in postgres openwebui n8n; do
+      cstatus=$(_docker inspect --format '{{.State.Status}}' "$cname" 2>/dev/null || echo "missing")
+      cimage=$(_docker inspect --format '{{.Config.Image}}' "$cname" 2>/dev/null | rev | cut -d/ -f1 | rev || echo "-")
+      cuptime=$(_docker inspect --format '{{.State.StartedAt}}' "$cname" 2>/dev/null | cut -dT -f1 || echo "-")
+      printf "  %-14s %-12s %-28s %s\n" "$cname" "$cstatus" "$cimage" "$cuptime"
+    done
+  else
+    echo "  Docker not available"
+  fi
+
+  # RAG pipeline
+  echo ""
+  echo "── RAG Pipeline ────────────────────────"
+  SUMMARY_CHUNKS=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM rag_chunks" 2>/dev/null | tr -d ' ')
+  SUMMARY_CLIENT="${ACTIVE_CLIENT:-$(grep '^ACTIVE_CLIENT=' "$BASE_PATH/.env" 2>/dev/null | cut -d= -f2)}"
+  SUMMARY_EMB="${EMBEDDING_MODEL:-$(grep '^EMBEDDING_MODEL=' "$BASE_PATH/.env" 2>/dev/null | cut -d= -f2)}"
+  printf "  %-20s %s\n" "Chunks indexed:" "${SUMMARY_CHUNKS:-?}"
+  printf "  %-20s %s\n" "Active client:" "$SUMMARY_CLIENT"
+  printf "  %-20s %s\n" "Embedding model:" "$SUMMARY_EMB"
+  echo -n "  Filter status:      "
+  FILTER_STATUS=$(_docker exec -i openwebui python3 -c "
+import sqlite3
+c=sqlite3.connect('/app/backend/data/webui.db').cursor()
+c.execute(\"SELECT is_active,is_global FROM function WHERE id='business_knowledge_rag'\")
+r=c.fetchone()
+print(f'active={r[0]} global={r[1]}') if r else print('not registered')
+" 2>/dev/null)
+  echo "${FILTER_STATUS:-unknown}"
+
+  # Obsidian
+  echo ""
+  echo "── Obsidian ────────────────────────────"
+  echo -n "  Installed:          "
+  if command -v obsidian &>/dev/null; then
+    echo "✅ yes"
+  else
+    echo "❌ no"
+  fi
+  printf "  %-20s %s\n" "Enabled (.env):" "${OBSIDIAN_ENABLED:-false}"
+  VAULT_TARGET=$(readlink -f "$BASE_PATH/current-client" 2>/dev/null || echo "$BASE_PATH/current-client")
+  printf "  %-20s %s\n" "Vault path:" "$VAULT_TARGET"
+  if [ -d "$VAULT_TARGET" ]; then
+    MD_COUNT=$(find -L "$VAULT_TARGET" -name "*.md" 2>/dev/null | wc -l)
+    printf "  %-20s %s\n" "Vault .md files:" "$MD_COUNT"
+  else
+    printf "  %-20s %s\n" "Vault .md files:" "directory not found"
+  fi
+
+  # Ollama models
+  echo ""
+  echo "── Ollama Models ───────────────────────"
+  if command -v ollama &>/dev/null; then
+    ollama list 2>/dev/null | head -10 | sed 's/^/  /'
+  else
+    echo "  Ollama not installed"
+  fi
+
+  # Disk usage
+  echo ""
+  echo "── Disk Usage ──────────────────────────"
+  printf "  %-25s %s\n" "Project total:" "$(du -sh "$BASE_PATH" 2>/dev/null | cut -f1)"
+  printf "  %-25s %s\n" "PostgreSQL data:" "$(du -sh "$BASE_PATH/postgres/data" 2>/dev/null | cut -f1)"
+  printf "  %-25s %s\n" "Ollama models:" "$(du -sh /usr/share/ollama/.ollama/models 2>/dev/null | cut -f1 || echo 'N/A')"
+  printf "  %-25s %s\n" "Python venv:" "$(du -sh "$BASE_PATH/vector-db/venv" 2>/dev/null | cut -f1)"
+
+  # System info
+  echo ""
+  echo "── System ──────────────────────────────"
+  printf "  %-18s %s\n" "OS:" "$(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')"
+  printf "  %-18s %s\n" "Kernel:" "$(uname -r)"
+  printf "  %-18s %s\n" "RAM:" "$(free -h | awk '/Mem:/{print $2}') total, $(free -h | awk '/Mem:/{print $7}') available"
+  printf "  %-18s %s\n" "GPU:" "$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo 'None detected')"
+  printf "  %-18s %s\n" "Docker:" "$(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
+  printf "  %-18s %s\n" "Python:" "$(python3 --version 2>/dev/null)"
+
+  echo ""
+  echo "========================================"
+  echo "         END OF INSTALL REPORT"
+  echo "========================================"
   echo ""
 }
 
@@ -315,14 +443,10 @@ if [ "$DRY_RUN" = true ]; then
   log_dry "Would create directory structure (mkdir -p, safe)"
 else
   # Root directories
-  for dir in admin system clients vault postgres vector-db dashboard n8n openclaw docker logs backups; do
+  for dir in admin system clients postgres vector-db dashboard n8n openclaw docker logs backups; do
     mkdir -p "$BASE_PATH/$dir"
   done
 
-  # Vault subdirectories
-  for dir in company-documents financials contracts handbooks websites uploads; do
-    mkdir -p "$BASE_PATH/vault/$dir"
-  done
 
   # Client directories
   for client in templates demo-company law-office insurance-agency acme-roofing; do
@@ -331,6 +455,12 @@ else
     mkdir -p "$BASE_PATH/clients/$client/OUTPUTS/drafts"
     mkdir -p "$BASE_PATH/clients/$client/OUTPUTS/reports"
     mkdir -p "$BASE_PATH/clients/$client/OUTPUTS/summaries"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/contracts"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/handbooks"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/financials"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/uploads"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/websites"
+    mkdir -p "$BASE_PATH/clients/$client/DOCUMENTS/company-documents"
   done
 fi
 
@@ -358,7 +488,7 @@ done
 echo ""
 echo "Project scaffold complete."
 
-prompt_user "PHASE 0 — Project Scaffold" "PHASE 0B — Environment Configuration" "No manual settings required. Directory structure created automatically."
+prompt_user "PHASE 0 — Project Scaffold" "PHASE 0B — Environment Configuration" "No manual settings required. Directory structure created automatically." 1
 
 # ==========================================
 # PHASE 0B — Environment Configuration
@@ -371,6 +501,9 @@ ENV_FILE="$BASE_PATH/.env"
 if [ -f "$ENV_FILE" ]; then
   ENV_EXISTED="yes"
   echo ".env already exists. Loading without overwrite."
+  CURRENT_CLIENT=$(grep "^ACTIVE_CLIENT=" "$ENV_FILE" | cut -d= -f2)
+  echo "  Active client: ${CURRENT_CLIENT:-not set}"
+  echo "  To change: ./admin/switch_client.sh <new-client>"
 else
   ENV_EXISTED="no"
   if [ "$DRY_RUN" = true ]; then
@@ -400,18 +533,59 @@ else
 
     read -p "Embedding provider — [1] Ollama or [2] OpenClaw API? [1/2]: " embed_choice
     case "$embed_choice" in
-      1) EMBEDDING_PROVIDER="ollama"; EMBEDDING_MODEL="nomic-embed-text" ;;
-      2) EMBEDDING_PROVIDER="openclaw_api"; EMBEDDING_MODEL="" ;;
-      *) EMBEDDING_PROVIDER="ollama"; EMBEDDING_MODEL="nomic-embed-text" ;;
+      1) EMBEDDING_PROVIDER="ollama" ;;
+      2) EMBEDDING_PROVIDER="openclaw_api" ;;
+      *) EMBEDDING_PROVIDER="ollama" ;;
     esac
 
-    read -p "Embedding dimensions (default: 768): " EMBEDDING_DIMENSIONS
-    EMBEDDING_DIMENSIONS="${EMBEDDING_DIMENSIONS:-768}"
+    if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+      echo ""
+      echo "  Embedding model options:"
+      echo "    [1] nomic-embed-text       — 768 dims, fast, good general-purpose (default)"
+      echo "    [2] mxbai-embed-large      — 1024 dims, better accuracy, slower"
+      echo "    [3] snowflake-arctic-embed  — 1024 dims, enterprise/retrieval focused"
+      echo ""
+      read -p "  Embedding model [1/2/3]: " embed_model_choice
+      case "$embed_model_choice" in
+        2) EMBEDDING_MODEL="mxbai-embed-large"; EMBEDDING_DIMENSIONS=1024 ;;
+        3) EMBEDDING_MODEL="snowflake-arctic-embed"; EMBEDDING_DIMENSIONS=1024 ;;
+        *) EMBEDDING_MODEL="nomic-embed-text"; EMBEDDING_DIMENSIONS=768 ;;
+      esac
+    else
+      EMBEDDING_MODEL=""
+      read -p "  Embedding dimensions (default: 768): " EMBEDDING_DIMENSIONS
+      EMBEDDING_DIMENSIONS="${EMBEDDING_DIMENSIONS:-768}"
+    fi
 
-    read -p "Active client (default: demo-company): " ACTIVE_CLIENT
+    echo ""
+    echo "  Available demo clients:"
+    echo "    demo-company          — Life insurance agency (fully populated example)"
+    echo "    business-ai-assistant — This system (self-referential demo)"
+    echo "    acme-roofing          — Roofing contractor"
+    echo "    law-office            — Legal practice"
+    echo ""
+    read -p "  Active client (default: demo-company): " ACTIVE_CLIENT
     ACTIVE_CLIENT="${ACTIVE_CLIENT:-demo-company}"
 
-    read -p "Enable Obsidian integration? [y/n]: " obs_enabled
+    echo ""
+    echo "  Chat model options (requires Ollama):"
+    echo "    [1] qwen3:14b   — 14B params, good balance of speed/quality (default, needs 16GB RAM)"
+    echo "    [2] qwen3:8b    — 8B params, faster, less accurate (needs 8GB RAM)"
+    echo "    [3] qwen3:30b   — 30B params, best quality, slower (needs 32GB RAM)"
+    echo "    [4] llama3.1:8b  — Meta's 8B, fast general-purpose (needs 8GB RAM)"
+    echo ""
+    read -p "  Chat model [1/2/3/4]: " model_choice
+    case "$model_choice" in
+      2) OLLAMA_MODEL="qwen3:8b" ;;
+      3) OLLAMA_MODEL="qwen3:30b" ;;
+      4) OLLAMA_MODEL="llama3.1:8b" ;;
+      *) OLLAMA_MODEL="qwen3:14b" ;;
+    esac
+
+    echo ""
+    echo "  Obsidian is a local markdown editor for viewing/editing your vault files."
+    echo "  Not required — you can edit files with any text editor."
+    read -p "  Enable Obsidian integration? [y/N]: " obs_enabled
     case "$obs_enabled" in
       y|Y) OBSIDIAN_ENABLED="true" ;;
       *) OBSIDIAN_ENABLED="false" ;;
@@ -425,7 +599,15 @@ OPENCLAW_API_KEY=${OPENCLAW_API_KEY}
 OPENCLAW_MODEL=${OPENCLAW_MODEL}
 OPENCLAW_WORKSPACE_PATH=${BASE_PATH}/openclaw
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:14b
+OLLAMA_MODEL=${OLLAMA_MODEL}
+
+# PostgreSQL credentials
+PG_HOST=localhost
+PG_PORT=5432
+PG_USER=admin
+PG_PASSWORD=strongpassword
+PG_DATABASE=businessassistant
+
 EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}
 EMBEDDING_MODEL=${EMBEDDING_MODEL}
 EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
@@ -463,7 +645,7 @@ EMBEDDING_DIMENSIONS="${EMBEDDING_DIMENSIONS:-768}"
 
 prompt_user "PHASE 0B — Environment Configuration" "PHASE 1 — Ubuntu Update & Tools" "Settings stored in: $ENV_FILE
 - Edit AI_PROVIDER, OLLAMA_MODEL, EMBEDDING_MODEL in .env to change defaults.
-- N8N_API_KEY can be set later after n8n first-login."
+- N8N_API_KEY can be set later after n8n first-login." 2
 
 # ==========================================
 # PHASE 1 — Ubuntu Update & Tools
@@ -523,7 +705,7 @@ else
   fi
 fi
 
-prompt_user "PHASE 1 — Ubuntu Update & Tools" "PHASE 2 — Docker" "No manual settings required."
+prompt_user "PHASE 1 — Ubuntu Update & Tools" "PHASE 2 — Docker" "No manual settings required." 3
 
 # ==========================================
 # PHASE 2 — Docker
@@ -621,7 +803,7 @@ elif [ "$DRY_RUN" = false ]; then
   DOCKER_AVAILABLE=false
 fi
 
-prompt_user "PHASE 2 — Docker" "PHASE 3 — PostgreSQL" "No manual settings required. Docker is managed via systemd."
+prompt_user "PHASE 2 — Docker" "PHASE 3 — PostgreSQL" "No manual settings required. Docker is managed via systemd." 4
 
 # ==========================================
 # PHASE 3 — PostgreSQL (Docker)
@@ -632,7 +814,7 @@ echo ""
 if [ "$DRY_RUN" = false ] && [ "$DOCKER_AVAILABLE" = false ]; then
   echo "  ❌ SKIPPED: Docker is not available. Cannot start PostgreSQL container."
   log_warn "Phase 3 skipped — Docker not installed. Fix Phase 2 first."
-  prompt_user "PHASE 3 — PostgreSQL" "PHASE 4 — Optional Local AI / Ollama" "SKIPPED: Docker required but not available."
+  prompt_user "PHASE 3 — PostgreSQL" "PHASE 4 — Optional Local AI / Ollama" "SKIPPED: Docker required but not available." 5
 elif [ "$DRY_RUN" = true ]; then
   log_dry "Would ensure postgres container is running (pgvector/pgvector:pg16)"
 else
@@ -641,9 +823,9 @@ else
 
   safe_docker_start "postgres" "pgvector/pgvector:pg16" \
     --restart unless-stopped \
-    -e POSTGRES_USER=admin \
-    -e POSTGRES_PASSWORD=strongpassword \
-    -e POSTGRES_DB=businessassistant \
+    -e POSTGRES_USER=${PG_USER:-admin} \
+    -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
+    -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
     -p 5432:5432 \
     -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data"
 
@@ -668,9 +850,9 @@ else
       mkdir -p "$BASE_PATH/postgres/data"
       _docker run -d --name postgres \
         --restart unless-stopped \
-        -e POSTGRES_USER=admin \
-        -e POSTGRES_PASSWORD=strongpassword \
-        -e POSTGRES_DB=businessassistant \
+        -e POSTGRES_USER=${PG_USER:-admin} \
+        -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
+        -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
         -p 5432:5432 \
         -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data" \
         pgvector/pgvector:pg16
@@ -733,9 +915,9 @@ else
   _docker ps --filter "name=postgres"
 
   prompt_user "PHASE 3 — PostgreSQL" "PHASE 4 — Optional Local AI / Ollama" "PostgreSQL credentials (set during container creation):
-- User: admin | Password: strongpassword
+- User: ${PG_USER:-admin} | Password: ${PG_PASSWORD:-strongpassword}
 - Database: businessassistant | Port: 5432
-- To change, edit this script and recreate the container."
+- To change, edit this script and recreate the container." 5
 fi
 
 # ==========================================
@@ -853,7 +1035,7 @@ fi
 
 prompt_user "PHASE 4 — Optional Local AI / Ollama" "PHASE 5 — Open WebUI" "Ollama listens on 0.0.0.0:11434 (all interfaces).
 - To change the default model, edit OLLAMA_MODEL in .env
-- To pull additional models: ollama pull <model-name>"
+- To pull additional models: ollama pull <model-name>" 6
 
 # ==========================================
 # PHASE 5 — Open WebUI (Docker)
@@ -942,7 +1124,7 @@ fi
 prompt_user "PHASE 5 — Open WebUI" "PHASE 6 — n8n" "MANUAL STEP REQUIRED:
 - Open http://localhost:3000 and create your admin account (first user = admin).
 - Remember these credentials - needed for API access and RAG setup (Phase 10).
-- Models from Ollama appear automatically in the model selector."
+- Models from Ollama appear automatically in the model selector." 7
 
 # ==========================================
 # PHASE 6 — n8n (Docker)
@@ -979,8 +1161,8 @@ prompt_user "PHASE 6 — n8n" "PHASE 6A — Import n8n Workflows" "MANUAL STEP R
 - Set N8N_API_KEY=<your-key> in .env
 - Create PostgreSQL credential in n8n:
   Host: host.docker.internal | Port: 5432
-  User: admin | Password: strongpassword | DB: businessassistant
-  Note the credential ID for workflow configuration."
+  User: ${PG_USER:-admin} | Password: ${PG_PASSWORD:-strongpassword} | DB: ${PG_DATABASE:-businessassistant}
+  Note the credential ID for workflow configuration." 8
 
 # ==========================================
 # PHASE 6A — Import n8n Workflows
@@ -1064,7 +1246,7 @@ fi
 prompt_user "PHASE 6A — Import n8n Workflows" "PHASE 6A2 — Activate n8n Workflows" "Workflows imported but inactive by default.
 - Activate via n8n UI or: docker exec n8n n8n publish:workflow --id=<ID>
 - Webhook pattern: http://localhost:5678/webhook/business/<path>
-- Update PG_CREDENTIAL_ID in workflow JSONs if your credential ID differs."
+- Update PG_CREDENTIAL_ID in workflow JSONs if your credential ID differs." 9
 
 # ==========================================
 # PHASE 6A2 — Activate n8n Workflows
@@ -1098,7 +1280,7 @@ fi
 
 prompt_user "PHASE 6A2 — Activate n8n Workflows" "PHASE 6B — OpenClaw" "All workflows activated.
 - Deactivate any you don't need via n8n UI.
-- Webhook-triggered workflows are now live."
+- Webhook-triggered workflows are now live." 10
 
 # ==========================================
 # PHASE 6B — OpenClaw
@@ -1131,7 +1313,7 @@ else
 
   prompt_user "PHASE 6B — OpenClaw" "PHASE 7 — pgvector" "OpenClaw is optional.
 - If installed, configure workspace path in .env (OPENCLAW_WORKSPACE_PATH).
-- No additional credentials needed for local usage."
+- No additional credentials needed for local usage." 11
 fi
 
 # ==========================================
@@ -1175,7 +1357,7 @@ else
   fi
 fi
 
-prompt_user "PHASE 7 — pgvector" "PHASE 7B — RAG Schema" "No manual settings required. Extension enabled inside PostgreSQL automatically."
+prompt_user "PHASE 7 — pgvector" "PHASE 7B — RAG Schema" "No manual settings required. Extension enabled inside PostgreSQL automatically." 12
 
 # ==========================================
 # PHASE 7B — RAG Schema
@@ -1232,7 +1414,7 @@ fi
 
 prompt_user "PHASE 7B — RAG Schema" "PHASE 8 — Python RAG Dependencies" "Schema deployed. Tables: rag_documents, rag_chunks.
 - Embedding dimensions: ${EMBEDDING_DIMENSIONS} (from .env EMBEDDING_DIMENSIONS).
-- To change dimensions, update .env and re-run this phase."
+- To change dimensions, update .env and re-run this phase." 13
 
 # ==========================================
 # PHASE 8 — Python RAG Dependencies
@@ -1290,8 +1472,8 @@ else
 fi
 
 prompt_user "PHASE 8 — Python RAG Dependencies" "PHASE 8B — RAG Index + Query Scripts" "Python venv: $BASE_PATH/vector-db/venv
-- Activate: source $BASE_PATH/vector-db/venv/bin/activate
-- No manual credentials needed - reads from .env automatically."
+- Activate: $BASE_PATH/vector-db/venv/bin/python3
+- No manual credentials needed - reads from .env automatically." 14
 
 # ==========================================
 # PHASE 8B — RAG Index + Query Scripts
@@ -1325,15 +1507,14 @@ EXCLUDE_FILES = {".env"}
 INDEX_PATHS = [
     os.path.join(BASE_PATH, "system"),
     os.path.join(BASE_PATH, "clients", ACTIVE_CLIENT),
-    os.path.join(BASE_PATH, "vault"),
 ]
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "user": "admin",
-    "password": "strongpassword",
-    "dbname": "businessassistant",
+    "host": os.getenv("PG_HOST", "localhost"),
+    "port": int(os.getenv("PG_PORT", "5432")),
+    "user": os.getenv("PG_USER", "admin"),
+    "password": os.getenv("PG_PASSWORD", "strongpassword"),
+    "dbname": os.getenv("PG_DATABASE", "businessassistant"),
 }
 
 
@@ -1455,11 +1636,11 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "user": "admin",
-    "password": "strongpassword",
-    "dbname": "businessassistant",
+    "host": os.getenv("PG_HOST", "localhost"),
+    "port": int(os.getenv("PG_PORT", "5432")),
+    "user": os.getenv("PG_USER", "admin"),
+    "password": os.getenv("PG_PASSWORD", "strongpassword"),
+    "dbname": os.getenv("PG_DATABASE", "businessassistant"),
 }
 
 
@@ -1530,9 +1711,9 @@ if __name__ == "__main__":
 safe_write_file "$QUERY_FILE" "$QUERY_CONTENT" "RAG query script"
 
 prompt_user "PHASE 8B — RAG Index + Query Scripts" "PHASE 9 — Obsidian (Native)" "Scripts created:
-- Index vault: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
-- Query vault: ./vector-db/venv/bin/python3 ./vector-db/query_vault.py 'your question'
-- Both read DB credentials and paths from .env automatically."
+- Index client: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
+- Query client: ./vector-db/venv/bin/python3 ./vector-db/query_vault.py 'your question'
+- Both read DB credentials and paths from .env automatically." 15
 
 # ==========================================
 # PHASE 9 — Obsidian (Native)
@@ -1613,7 +1794,7 @@ Obsidian is the **Human Editable Business Brain**.
 ## Integration
 
 The RAG indexer reads from the Obsidian vault path and indexes into PostgreSQL + pgvector.
-Run \`./vector-db/venv/bin/python3 ./vector-db/index_vault.py\` after editing vault contents."
+Run \`./vector-db/venv/bin/python3 ./vector-db/index_vault.py\` after editing client documents."
 
   safe_write_file "$OBSIDIAN_NOTES" "$OBSIDIAN_CONTENT" "Obsidian native installation documentation"
 else
@@ -1622,7 +1803,7 @@ fi
 
 prompt_user "PHASE 9 — Obsidian (Native)" "PHASE 10 — RAG Pipeline" "Launch Obsidian with: obsidian &
 - Select 'Open folder as vault' and choose $BASE_PATH/current-client
-- No credentials needed - Obsidian runs locally."
+- No credentials needed - Obsidian runs locally." 16
 
 # --- COMMENTED OUT: Docker-based Obsidian (replaced by native install above) ---
 # # PHASE 9 — Obsidian (Docker)
@@ -1647,6 +1828,8 @@ elif [ "$DRY_RUN" = true ]; then
   log_dry "Would install psycopg2 in WebUI container"
   log_dry "Would register Business Knowledge RAG function in Open WebUI"
 else
+  # Note: psycopg2-binary is also declared in the RAG filter's frontmatter (requirements: psycopg2-binary)
+  # so Open WebUI will auto-install it on every startup. This manual install is a belt-and-suspenders fallback.
   echo "Installing psycopg2 in WebUI container..."
   _docker exec openwebui pip install psycopg2-binary --quiet 2>&1 || log_warn "Failed to install psycopg2 in WebUI container"
 
@@ -1662,7 +1845,7 @@ else
   PG_TEST=$(_docker exec openwebui python3 -c "
 import psycopg2
 try:
-    conn = psycopg2.connect(host='host.docker.internal', port=5432, user='admin', password='strongpassword', dbname='businessassistant')
+    conn = psycopg2.connect(host='host.docker.internal', port=5432, user='${PG_USER:-admin}', password='${PG_PASSWORD:-strongpassword}', dbname='${PG_DATABASE:-businessassistant}')
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM rag_chunks')
     print(f'OK:{cur.fetchone()[0]}')
@@ -1695,9 +1878,10 @@ except Exception as e:
 """
 title: Business Knowledge RAG
 author: Business Assistant Box
-version: 1.1.0
+version: 1.2.0
 description: Retrieves relevant business context from pgvector and injects into prompts.
 type: filter
+requirements: psycopg2-binary
 """
 
 import requests
@@ -1711,16 +1895,37 @@ class Filter:
         pg_host: str = Field(default="host.docker.internal")
         pg_port: int = Field(default=5432)
         pg_user: str = Field(default="admin")
-        pg_password: str = Field(default="strongpassword")
+        pg_password: str = Field(default="strongpassword")  # override in WebUI Admin → Functions → Valves
         pg_database: str = Field(default="businessassistant")
         ollama_url: str = Field(default="http://host.docker.internal:11434")
         embedding_model: str = Field(default="nomic-embed-text")
-        active_client: str = Field(default="law-office")
-        top_k: int = Field(default=5)
+        active_client: str = Field(default="")
+        top_k: int = Field(default=8)
         similarity_threshold: float = Field(default=0.3)
 
     def __init__(self):
         self.valves = self.Valves()
+
+    def _get_active_client(self) -> str:
+        """Return valve override if set, otherwise detect from most recent indexed client."""
+        if self.valves.active_client:
+            return self.valves.active_client
+        try:
+            conn = psycopg2.connect(
+                host=self.valves.pg_host,
+                port=self.valves.pg_port,
+                user=self.valves.pg_user,
+                password=self.valves.pg_password,
+                dbname=self.valves.pg_database,
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT client_name FROM rag_documents ORDER BY id DESC LIMIT 1")
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            return row[0] if row else "demo-company"
+        except Exception:
+            return "demo-company"
 
     def _get_embedding(self, text: str) -> Optional[list]:
         try:
@@ -1747,14 +1952,21 @@ class Filter:
             embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
             cur.execute(
                 """
-                SELECT chunk_text, source_path, 1 - (embedding <=> %s::vector) AS similarity
+                SELECT chunk_text, source_path,
+                       (1 - (embedding <=> %s::vector))
+                       + CASE
+                           WHEN title IN ('CLIENT_PROFILE.md','BUSINESS_KNOWLEDGE.md','FAQ.md','OWNER_PREFERENCES.md') THEN 0.08
+                           WHEN source_path LIKE 'clients/%%' THEN 0.04
+                           ELSE 0.0
+                         END
+                       AS similarity
                 FROM rag_chunks
                 WHERE client_name = %s
-                  AND 1 - (embedding <=> %s::vector) > %s
-                ORDER BY embedding <=> %s::vector
+                  AND (1 - (embedding <=> %s::vector)) > %s
+                ORDER BY similarity DESC
                 LIMIT %s
                 """,
-                (embedding_str, self.valves.active_client, embedding_str, self.valves.similarity_threshold, embedding_str, self.valves.top_k),
+                (embedding_str, self._get_active_client(), embedding_str, self.valves.similarity_threshold, self.valves.top_k),
             )
             rows = cur.fetchall()
             cur.close()
@@ -1788,7 +2000,7 @@ class Filter:
         for content, source, similarity in chunks:
             context_parts.append(f"[{source} | relevance: {similarity:.2f}]\n{content}")
 
-        prefix = "Use the following business knowledge to answer. If the context doesn't help, answer normally.\n\n---\n"
+        prefix = "You are this company's Business Assistant. Use ONLY the following verified business knowledge. Cite the source file. If the answer is not in the context below, say 'I don't have that information in our records.'\n\n---\n"
         context = prefix + "\n\n".join(context_parts) + "\n\n---\n\n"
 
         messages[-1]["content"] = context + query
@@ -1804,12 +2016,12 @@ RAGEOF
   echo ""
 fi
 
-prompt_user "PHASE 10 — RAG Pipeline" "PHASE 11 — Index Vault" "RAG filter function created."
+prompt_user "PHASE 10 — RAG Pipeline" "PHASE 11 — Index Client" "RAG filter function created." 17
 
 # ==========================================
-# PHASE 11 — Index Vault into pgvector
+# PHASE 11 — Index Client into pgvector
 # ==========================================
-echo "=== PHASE 11 — Index Vault ==="
+echo "=== PHASE 11 — Index Client ==="
 echo ""
 
 VENV_PATH="$BASE_PATH/vector-db/venv"
@@ -1817,9 +2029,9 @@ INDEX_SCRIPT="$BASE_PATH/vector-db/index_vault.py"
 
 if [ ! -f "$INDEX_SCRIPT" ]; then
   echo "  ⚠️  index_vault.py not found. Skipping."
-  WARNINGS+=("Vault indexing skipped — script not found")
+  WARNINGS+=("Client indexing skipped — script not found")
 else
-  echo "  Activating venv and indexing vault..."
+  echo "  Activating venv and indexing client files..."
   if [ -f "$VENV_PATH/bin/activate" ]; then
     (
       source "$VENV_PATH/bin/activate"
@@ -1829,19 +2041,19 @@ else
     INDEX_EXIT=$?
     if [ $INDEX_EXIT -eq 0 ]; then
       CHUNK_COUNT=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM rag_chunks" 2>/dev/null | tr -d ' ')
-      echo "  ✅ Vault indexed ($CHUNK_COUNT chunks in pgvector)"
+      echo "  ✅ Client indexed ($CHUNK_COUNT chunks in pgvector)"
     else
       echo "  ⚠️  Indexing returned exit code $INDEX_EXIT"
-      WARNINGS+=("Vault indexing may have failed — check vector-db/index_vault.py")
+      WARNINGS+=("Client indexing may have failed — check vector-db/index_vault.py")
     fi
   else
     echo "  ⚠️  Python venv not found at $VENV_PATH"
-    WARNINGS+=("Vault indexing skipped — venv not found")
+    WARNINGS+=("Client indexing skipped — venv not found")
   fi
 fi
 echo ""
 
-prompt_user "PHASE 11 — Index Vault" "PHASE 12 — Register RAG Filter" "Vault documents indexed into pgvector."
+prompt_user "PHASE 11 — Index Client" "PHASE 12 — Register RAG Filter" "Client documents indexed into pgvector." 18
 
 # ==========================================
 # PHASE 12 — Register RAG Filter in OpenWebUI
@@ -1864,27 +2076,28 @@ else
   # Register directly via SQLite (bypasses API auth issues)
   echo "  Registering RAG filter function..."
   REGISTER_RESULT=$(_docker exec -i openwebui python3 -c "
-import sqlite3, json, sys
+import sqlite3, json, sys, time
 
 code = sys.stdin.read()
 function_id = 'business_knowledge_rag'
+now_ts = int(time.time())
 
 conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
 
 meta = json.dumps({
     'description': 'Retrieves relevant business context from pgvector and injects into prompts',
-    'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.1.0', 'type': 'filter'}
+    'manifest': {'title': 'Business Knowledge RAG', 'author': 'NativeBlackBox', 'version': '1.2.0', 'type': 'filter'}
 })
 
 cur.execute('SELECT id FROM function WHERE id=?', (function_id,))
 if cur.fetchone():
-    cur.execute('UPDATE function SET content=?, meta=?, is_active=1, is_global=1 WHERE id=?', (code, meta, function_id))
+    cur.execute('UPDATE function SET content=?, meta=?, is_active=1, is_global=1, updated_at=? WHERE id=?', (code, meta, now_ts, function_id))
     print('UPDATED')
 else:
     cur.execute(
-        'INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, datetime(\"now\"), datetime(\"now\"))',
-        (function_id, 'system', 'Business Knowledge RAG', 'filter', code, meta)
+        'INSERT INTO function (id, user_id, name, type, content, meta, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)',
+        (function_id, 'system', 'Business Knowledge RAG', 'filter', code, meta, now_ts, now_ts)
     )
     print('CREATED')
 
@@ -1903,13 +2116,37 @@ conn.close()
   echo "  Restarting OpenWebUI to load filter..."
   _docker restart openwebui >/dev/null 2>&1
   echo "  ✅ OpenWebUI restarted"
+
+  # Set default system prompt so the model always knows its identity
+  echo "  Setting default system prompt..."
+  sleep 15
+  _docker exec openwebui python3 -c "
+import sqlite3, json, time
+prompt = '''You are a Business Assistant. You help the business owner manage daily operations, answer questions from company knowledge, and draft communications.
+
+Be professional, concise, and helpful. Use plain English. Summaries first, details on request. Cite your source document when answering from business knowledge.
+
+Rules: Never send emails, delete records, move money, or sign anything without approval. Never fabricate facts. If you do not have the information, say so. Escalate legal threats, security incidents, and fraud immediately.'''
+now_ts = int(time.time())
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT key FROM config WHERE key = ?', ('ui.default_system_prompt',))
+if cur.fetchone():
+    cur.execute('UPDATE config SET value = ?, updated_at = ? WHERE key = ?', (json.dumps(prompt), now_ts, 'ui.default_system_prompt'))
+else:
+    cur.execute('INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?)', ('ui.default_system_prompt', json.dumps(prompt), now_ts))
+conn.commit()
+conn.close()
+print('OK')
+" 2>&1
+  echo "  ✅ Default system prompt configured"
 fi
 echo ""
 
 prompt_user "PHASE 12 — Register RAG Filter" "" "RAG pipeline fully configured.
 - Filter: business_knowledge_rag (active + global)
 - The filter auto-injects business context into every chat.
-- To re-index after editing vault files: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py"
+- To re-index after editing client files: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py" 19
 
 # ==========================================
 # FINAL SUMMARY

@@ -115,13 +115,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GOOGLE_API_KEY}}",
+        "url": "http://host.docker.internal:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You are a business briefing assistant. Compile a morning briefing for the business owner. Include:\\n\\n1. TODAY\\'S SCHEDULE \u2014 meetings, deadlines, appointments\\n2. PENDING ACTIONS \u2014 emails needing response, approvals waiting\\n3. PRIORITIES \u2014 top 3 things to focus on today\\n4. REMINDERS \u2014 follow-ups due, deadlines approaching\\n\\nCalendar events: ' + JSON.stringify($json.calendar_events || []) + '\\n\\nUnread emails (count): ' + ($json.email_count || 0) + '\\n\\nFormat as a clean, scannable briefing. Keep it under 300 words.' }] }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a business briefing assistant. Compile a morning briefing for the business owner. Include:\\n\\n1. TODAY\\'S SCHEDULE \u2014 meetings, deadlines, appointments\\n2. PENDING ACTIONS \u2014 emails needing response, approvals waiting\\n3. PRIORITIES \u2014 top 3 things to focus on today\\n4. REMINDERS \u2014 follow-ups due, deadlines approaching\\n\\nCalendar events: ' + JSON.stringify($json.calendar_events || []) + '\\n\\nUnread emails (count): ' + ($json.email_count || 0) + '\\n\\nFormat as a clean, scannable briefing. Keep it under 300 words.', stream: false }) }}"
       },
-      "id": "gemini-briefing",
-      "name": "Gemini \u2014 Generate Briefing",
+      "id": "ollama-briefing",
+      "name": "Ollama \u2014 Generate Briefing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -135,7 +135,7 @@
           "string": [
             {
               "name": "briefing",
-              "value": "={{ $json.candidates[0].content.parts[0].text }}"
+              "value": "={{ $json.response }}"
             },
             {
               "name": "generated_at",
@@ -154,6 +154,19 @@
       "typeVersion": 3.4,
       "position": [
         880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst briefing = $input.first().json.briefing;\nconst now = new Date();\nconst dateStr = now.toISOString().split('T')[0];\nconst dayStr = now.toLocaleDateString('en-US', { weekday: 'long' });\n\nconst todayMd = `# TODAY.md\n\n## Purpose\n\nProvide the Business Assistant with current operational context.\n\nThis file is refreshed daily by the Daily Briefing workflow.\n\n---\n\nDate: ${dateStr}\n\nDay: ${dayStr}\n\n---\n\n${briefing}\n`;\n\nconst todayPath = '/home/node/.n8n/storage/TODAY.md';\nfs.writeFileSync(todayPath, todayMd);\n\nreturn [{ json: { written: true, path: todayPath, date: dateStr } }];"
+      },
+      "id": "write-today",
+      "name": "Write TODAY.md",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
         0
       ]
     }
@@ -201,18 +214,29 @@
       "main": [
         [
           {
-            "node": "Gemini \u2014 Generate Briefing",
+            "node": "Ollama \u2014 Generate Briefing",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini \u2014 Generate Briefing": {
+    "Ollama \u2014 Generate Briefing": {
       "main": [
         [
           {
             "node": "Format Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Briefing": {
+      "main": [
+        [
+          {
+            "node": "Write TODAY.md",
             "type": "main",
             "index": 0
           }

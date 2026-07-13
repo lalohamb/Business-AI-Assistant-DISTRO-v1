@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Maintain important business knowledge for Life Legacy Insurance.
-Owner:Lalo Day
+Maintain important business knowledge for  Demo-Company Insurance.
+Owner: Lalo Day
 This acts as the company's operational encyclopedia.
 
 ---
 
 ## Company Overview
 
-Company Name: LifeLegacy Insurance
+Company Name:  Demo-Company Insurance
 
 Industry: Life Insurance & Financial Planning
 
