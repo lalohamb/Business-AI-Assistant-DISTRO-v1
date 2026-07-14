@@ -15,6 +15,7 @@
 # Override via environment:
 #   DRY_RUN=true ./admin/configure_n8n.sh
 #   SAFE_MODE=false ./admin/configure_n8n.sh
+#   FORCE_WORKFLOWS=true ./admin/configure_n8n.sh
 # ==========================================
 
 set -euo pipefail
@@ -32,6 +33,7 @@ TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 
 DRY_RUN="${DRY_RUN:-false}"
 SAFE_MODE="${SAFE_MODE:-true}"
+FORCE_WORKFLOWS="${FORCE_WORKFLOWS:-false}"
 
 # Load .env
 if [ -f "$ENV_FILE" ]; then
@@ -480,10 +482,24 @@ else
     existing_id=$(get_workflow_by_name "$workflow_name")
 
     if [ -n "$existing_id" ]; then
-      echo "  Already exists (id: $existing_id) — skipping import."
-
-      if [ "$SAFE_MODE" = true ]; then
+      if [ "$FORCE_WORKFLOWS" = true ]; then
+        echo "  Exists (id: $existing_id) — force-updating..."
         backup_workflow "$existing_id" "$workflow_name"
+        import_data=$(jq 'del(.id) | del(.versionId)' "$json_file")
+        result=$(n8n_api PUT "/workflows/$existing_id" "$import_data")
+        updated_id=$(echo "$result" | jq -r '.id' 2>/dev/null)
+        if [ -n "$updated_id" ] && [ "$updated_id" != "null" ]; then
+          log_ok "Updated: $workflow_name (id: $updated_id)"
+          IMPORTED+=("$workflow_name (updated)")
+        else
+          error_msg=$(echo "$result" | jq -r '.message // "Unknown error"' 2>/dev/null)
+          log_error "Failed to update $workflow_name: $error_msg"
+        fi
+      else
+        echo "  Already exists (id: $existing_id) — skipping import."
+        if [ "$SAFE_MODE" = true ]; then
+          backup_workflow "$existing_id" "$workflow_name"
+        fi
       fi
     else
       # Import new workflow

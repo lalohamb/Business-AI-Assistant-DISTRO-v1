@@ -1,0 +1,50 @@
+=== SYSTEM FILES (system/) ===
+AGENTS.md           = Operating rules, safety controls, workflow discipline, approval requirements
+IDENTITY.md         = Assistant name, role, personality, communication style, decision philosophy
+SYSTEM_MEMORY.md    = Persistent system-wide knowledge, core behaviors, escalation rules
+TOOLS.md            = Available tools, capabilities, restrictions, priority order
+HEARTBEAT.md        = Recurring daily/weekly/monthly checklists, monitoring schedule
+PROMPTS.md          = Reusable task prompts (briefing, email review, intake, proposals)
+POLICIES.md         = Approval rules, prohibited actions (email, calendar, financial, privacy)
+
+=== CLIENT FILES (clients/{ACTIVE_CLIENT}/) ===
+CLIENT_PROFILE.md       = Company info, personnel, products, priorities, service philosophy
+BUSINESS_KNOWLEDGE.md   = Operational encyclopedia (carriers, commissions, processes, systems, terms)
+FAQ.md                  = Common questions and answers (customers, vendors, internal staff)
+OWNER_PREFERENCES.md    = Owner communication style, decision preferences, learned rules
+DAILY_BRIEFING.md       = Today's metrics, urgent items, appointments, production
+
+=== CLIENT PROCEDURES (clients/{ACTIVE_CLIENT}/PROCEDURES/) ===
+EMAIL.md            = Email categories, triage workflow, response guidelines, escalation triggers
+CALENDAR.md         = Scheduling rules, conflict resolution, reminder policy
+CUSTOMER_INTAKE.md  = New customer onboarding workflow, intake summary format
+DAILY_BRIEFING.md   = Morning briefing format and sections
+DOCUMENTS.md        = Document drafting workflow, formatting standards, quality rules
+
+=== CLIENT MEMORY (clients/{ACTIVE_CLIENT}/MEMORY/) ===
+CUSTOMER_RULES.md   = Learned per-customer preferences and handling rules
+VENDOR_RULES.md     = Learned vendor contacts, schedules, negotiation notes
+LEARNED_PATTERNS.md = Confirmed repeated behaviors and approved recommendations
+OPEN_TASKS.md       = Active tasks, pending approvals, follow-up items
+TODAY.md            = Current day operational context (refreshed daily)
+
+=== CLIENT DOCUMENTS (clients/{ACTIVE_CLIENT}/DOCUMENTS/) ===
+company-documents/  = SOPs, handbooks, internal policies
+contracts/          = Signed agreements
+financials/         = P&L, tax docs, reports
+handbooks/          = Employee/operations handbooks
+uploads/            = Misc uploaded files
+websites/           = Saved web content
+
+=== RAG PIPELINE (vector-db/) ===
+index_vault.py      = Indexes system/ + clients/{ACTIVE_CLIENT}/ into pgvector
+query_vault.py      = CLI tool to query RAG database
+schema.sql          = PostgreSQL table definitions (rag_documents, rag_chunks)
+
+=== RAG FILTER (dashboard/functions/) ===
+business_rag_filter.py = Open WebUI filter — embeds user query, retrieves chunks, injects context
+
+=== WORKFLOWS (n8n/workflows/) ===
+standard/           = Core workflows (email-triage, calendar-review, daily-briefing, approval-router, rag-query, ask-assistant)
+selectable/         = Optional workflows (document-drafting, customer-intake, invoice-generator, lead-followup, etc.)
+manifest.json       = Workflow registry with descriptions, credentials, schedules

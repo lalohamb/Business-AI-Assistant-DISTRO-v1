@@ -10,6 +10,31 @@ Track all project changes.
 
 ---
 
+## Version 0.4
+
+Date: 2026-07-14
+
+Security & Reliability Hardening
+
+Changes:
+
+### Security
+
+* **PostgreSQL bound to localhost only** — Changed `-p 5432:5432` to `-p 127.0.0.1:5432:5432` in `install.sh`. Prevents remote network access to the database with default credentials. Docker containers still reach it via `host.docker.internal`.
+* **`.env` set to chmod 600 on creation** — `install.sh` now sets owner-only permissions immediately after writing `.env`. `validate_env.sh` warns if permissions are incorrect.
+* **`change_password.sh` added** — Admin script to change PostgreSQL password. Updates both the running container and `.env` in one step.
+* **`change_model.sh` added** — Admin script to switch Ollama chat model. Pulls if not installed, updates `.env`.
+* **`update_containers.sh` added** — Pulls latest Docker images and recreates containers preserving data volumes.
+* **Pre-flight system check integrated** — `install.sh` now runs `system_minreq_check.sh` before Phase 0. Aborts if minimum requirements not met (user can override).
+* **Workflow force-update flag** — `FORCE_WORKFLOWS=true ./admin/install.sh` re-imports workflow JSONs even if they already exist in n8n (for shipping updated versions).
+* **psycopg2 persistence** — `update_containers.sh` now reinstalls `psycopg2-binary` in the OpenWebUI container after recreation, preventing RAG filter breakage.
+
+Reason: Default install exposed PostgreSQL on all interfaces with known password "strongpassword". Any machine on the same network could connect.
+
+Impact: No functional change for local usage. Remote BI tools must use SSH tunnel.
+
+---
+
 ## Version 0.3
 
 Date: 2026-07-12

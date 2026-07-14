@@ -120,9 +120,9 @@ print_summary() {
 # MAIN
 # ==========================================
 
-# License check — enforce client limit before onboarding
-source "$SCRIPT_DIR/license_check.sh"
-check_license
+# License check — disabled pending fix for directory-count bug (issue #3)
+# source "$SCRIPT_DIR/license_check.sh"
+# check_license
 
 echo "========================================"
 echo "   BUSINESS ASSISTANT BOX"

@@ -35,6 +35,17 @@ Preferred Error Messages: Include the exact command to fix the problem.
 
 ---
 
+## Email Rules
+
+- Always include a warm greeting by first name
+- Never send quotes without a disclaimer: "Rates shown are estimates pending underwriting approval"
+- Claims-related emails must be empathetic first, procedural second
+- All prospect follow-ups should include educational value (tip, article, or insight)
+- Never use pushy sales language — educate, don't pressure
+- BCC admin@businessassistant.com on all claim communications
+
+---
+
 ## Development Preferences
 
 - Shell scripts must be idempotent (safe to re-run)

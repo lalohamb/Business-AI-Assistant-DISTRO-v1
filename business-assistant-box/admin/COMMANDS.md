@@ -10,6 +10,9 @@
 # Install / reinstall the full system
 sudo ./admin/install.sh
 
+# Install with force-update of existing workflows
+FORCE_WORKFLOWS=true sudo ./admin/install.sh
+
 # Uninstall (interactive — selective or full)
 ./admin/uninstall.sh
 
@@ -40,6 +43,19 @@ sudo ./admin/install.sh
 
 # Configure n8n workflows
 ./admin/configure_n8n.sh
+
+# Force-update existing n8n workflows (overwrite with latest JSONs)
+FORCE_WORKFLOWS=true ./admin/configure_n8n.sh
+
+# Change PostgreSQL password
+./admin/change_password.sh
+
+# Switch chat model
+./admin/change_model.sh
+./admin/change_model.sh qwen3:8b
+
+# Update Docker containers to latest images
+./admin/update_containers.sh
 
 # Configure RAG pipeline
 ./admin/configure_rag_pipeline.sh

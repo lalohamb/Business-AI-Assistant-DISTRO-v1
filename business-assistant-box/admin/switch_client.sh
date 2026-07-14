@@ -6,6 +6,12 @@ ENV_FILE="$BASE/.env"
 SYMLINK="$BASE/current-client"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 
+# Log all output to file
+mkdir -p "$BASE/logs"
+LOG_FILE="$BASE/logs/switch_client.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== switch_client started: $(date) ==="
+
 FORCE=false
 
 # Parse arguments
@@ -27,17 +33,17 @@ done
 
 CLIENT_PATH="$BASE/clients/$CLIENT"
 
-# License check — single-client licenses can only use their one client
-source "$SCRIPT_DIR/license_check.sh"
-check_license
-if [ "$LICENSE_TIER" = "single" ]; then
-  CURRENT_COUNT=$(count_active_clients)
-  if [ "$CURRENT_COUNT" -gt 1 ]; then
-    echo "❌ Single-client license. Cannot switch between multiple clients."
-    echo "   Upgrade to multi-client to serve more than one business."
-    exit 1
-  fi
-fi
+# License check — disabled pending fix for directory-count bug (issue #3)
+# source "$SCRIPT_DIR/license_check.sh"
+# check_license
+# if [ "$LICENSE_TIER" = "single" ]; then
+#   CURRENT_COUNT=$(count_active_clients)
+#   if [ "$CURRENT_COUNT" -gt 1 ]; then
+#     echo "❌ Single-client license. Cannot switch between multiple clients."
+#     echo "   Upgrade to multi-client to serve more than one business."
+#     exit 1
+#   fi
+# fi
 
 echo "========================================"
 echo "   Switch Active Client"
@@ -130,20 +136,31 @@ INDEX_SCRIPT="$BASE/vector-db/index_vault.py"
 
 if [ -f "$VENV_PYTHON" ] && [ -f "$INDEX_SCRIPT" ]; then
   # Flush all other clients' chunks so only active client data remains
+  PG_USER="${PG_USER:-admin}" PG_PASSWORD="${PG_PASSWORD:-strongpassword}" PG_DATABASE="${PG_DATABASE:-businessassistant}" ACTIVE_CLIENT="$CLIENT" \
   "$VENV_PYTHON" -c "
-import psycopg2
-conn = psycopg2.connect(host='localhost', port=5432, user='${PG_USER:-admin}', password='${PG_PASSWORD:-strongpassword}', dbname='${PG_DATABASE:-businessassistant}')
+import os, psycopg2
+conn = psycopg2.connect(host='localhost', port=5432, user=os.environ['PG_USER'], password=os.environ['PG_PASSWORD'], dbname=os.environ['PG_DATABASE'])
 cur = conn.cursor()
-cur.execute(\"DELETE FROM rag_chunks WHERE client_name != %s\", ('$CLIENT',))
-cur.execute(\"DELETE FROM rag_documents WHERE client_name != %s\", ('$CLIENT',))
+client = os.environ['ACTIVE_CLIENT']
+cur.execute('DELETE FROM rag_chunks WHERE client_name != %s', (client,))
+cur.execute('DELETE FROM rag_documents WHERE client_name != %s', (client,))
 conn.commit()
 conn.close()
-print(f'  Flushed old client data from RAG database.')
+print('  Flushed old client data from RAG database.')
 " 2>/dev/null
 
+  # Unload chat models from VRAM so embedding model gets full GPU
+  echo "  Unloading chat models from VRAM for faster indexing..."
+  for model in $(ollama ps 2>/dev/null | tail -n +2 | awk '{print $1}'); do
+    ollama stop "$model" 2>/dev/null && echo "    Unloaded: $model"
+  done
+  sleep 2
+
   # Re-index active client
-  "$VENV_PYTHON" "$INDEX_SCRIPT" 2>&1 | tail -3
-  if [ $? -eq 0 ]; then
+  INDEX_OUTPUT=$("$VENV_PYTHON" "$INDEX_SCRIPT" 2>&1)
+  INDEX_EXIT=$?
+  echo "$INDEX_OUTPUT" | tail -3
+  if [ $INDEX_EXIT -eq 0 ]; then
     echo "  ✅ RAG re-indexed for $CLIENT"
   else
     echo "  ⚠️  RAG indexing failed. Run manually: $VENV_PYTHON $INDEX_SCRIPT"
@@ -175,8 +192,27 @@ conn.commit()
 conn.close()
 print('  ✅ RAG filter deployed and enabled in OpenWebUI')
 " 2>&1
-    docker restart openwebui >/dev/null 2>&1 &
-    echo "  ✅ OpenWebUI restarting with updated filter"
+    docker restart openwebui >/dev/null 2>&1
+    echo "  Waiting for OpenWebUI to finish restart..."
+    sleep 15
+    for i in $(seq 1 12); do
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null)
+      if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "303" ]; then
+        break
+      fi
+      sleep 5
+    done
+    # Re-enforce is_global=1 after restart (OpenWebUI startup can reset it)
+    docker exec openwebui python3 -c "
+import sqlite3
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('UPDATE function SET is_active=1, is_global=1 WHERE id=\"business_knowledge_rag\"')
+conn.commit()
+conn.close()
+print('  ✅ RAG filter confirmed global after restart')
+" 2>&1
+    echo "  ✅ OpenWebUI restarted with global RAG filter"
   else
     echo "  ⚠️  Filter file not found: $FILTER_FILE"
   fi

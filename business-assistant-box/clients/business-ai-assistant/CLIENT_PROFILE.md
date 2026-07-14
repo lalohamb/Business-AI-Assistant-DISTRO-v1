@@ -10,7 +10,7 @@ Website: (self-hosted, no public site)
 
 Primary Location: Deployed on-premise or cloud VPS
 
-Years in Business: 1
+Years in Business: .25
 
 Business Hours: 24/7 (automated system)
 

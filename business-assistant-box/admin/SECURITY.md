@@ -31,9 +31,14 @@ inside:
 
 Store only in:
 
-* .env files
+* .env files (chmod 600 — owner-only access)
 * Secret stores
 * Password manager
+
+The `.env` file is created with `chmod 600` during install. If permissions are
+incorrect, `validate_env.sh` will warn. Fix with:
+
+    chmod 600 .env
 
 ---
 
@@ -91,6 +96,15 @@ Block all other unnecessary ports.
 Restrict access.
 
 Database must never be publicly exposed.
+
+PostgreSQL is bound to `127.0.0.1:5432` (localhost only). Docker containers reach it
+via `host.docker.internal`. This prevents any remote network access to the database.
+
+If you need remote access (e.g. external BI tool), use an SSH tunnel:
+
+    ssh -L 5432:127.0.0.1:5432 user@your-server
+
+Never change the bind to `0.0.0.0:5432` unless behind a firewall.
 
 ---
 

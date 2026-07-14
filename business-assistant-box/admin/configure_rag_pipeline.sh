@@ -14,6 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$BASE_PATH/.env"
 
+# Log all output to file
+mkdir -p "$BASE_PATH/logs"
+LOG_FILE="$BASE_PATH/logs/configure_rag.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== configure_rag_pipeline started: $(date) ==="
+
 # Load .env
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -244,6 +250,30 @@ fi
 echo ""
 
 # ==========================================
+# STEP 5B — Update filter source default to match current embedding model
+# ==========================================
+echo "=== STEP 5B — Update filter embedding_model default ==="
+
+EMBED_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+_docker exec openwebui python3 -c "
+import sqlite3
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT content FROM function WHERE id=\"${FUNCTION_ID}\"')
+row = cur.fetchone()
+if row:
+    import re
+    code = re.sub(r'embedding_model: str = Field\(default=\"[^\"]*\"\)', 'embedding_model: str = Field(default=\"${EMBED_MODEL}\")', row[0])
+    cur.execute('UPDATE function SET content=? WHERE id=\"${FUNCTION_ID}\"', (code,))
+    conn.commit()
+    print('  ✅ Filter default updated: embedding_model=\"${EMBED_MODEL}\"')
+else:
+    print('  ⚠️  Filter not found in DB')
+conn.close()
+" 2>&1
+echo ""
+
+# ==========================================
 # STEP 6 — Sync valves (embedding model, top_k, active_client)
 # ==========================================
 echo "=== STEP 6 — Sync function valves ==="
@@ -253,7 +283,7 @@ import json
 valves = {
     'embedding_model': '${EMBEDDING_MODEL:-nomic-embed-text}',
     'active_client': '${ACTIVE_CLIENT:-}',
-    'top_k': 8
+    'top_k': ${RAG_TOP_K:-8}
 }
 print(json.dumps(valves))
 ")
@@ -269,7 +299,7 @@ conn.close()
 print('OK')
 " "$VALVES_JSON" 2>&1
 
-echo "  ✅ Valves synced: embedding_model=${EMBEDDING_MODEL:-nomic-embed-text}, active_client=${ACTIVE_CLIENT:-auto}"
+echo "  ✅ Valves synced: embedding_model=${EMBEDDING_MODEL:-nomic-embed-text}, active_client=${ACTIVE_CLIENT:-auto}, top_k=${RAG_TOP_K:-8}"
 echo ""
 
 # ==========================================
@@ -277,16 +307,16 @@ echo ""
 # ==========================================
 echo "=== STEP 7 — Sync WebUI native RAG embedding config ==="
 
-_docker exec openwebui python3 -c '
+_docker exec openwebui python3 -c "
 import sqlite3, json, time
-conn = sqlite3.connect("/app/backend/data/webui.db")
+conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
 now = int(time.time())
-cur.execute("UPDATE config SET value = json(?), updated_at = ? WHERE key = ?", (json.dumps("ollama"), now, "rag.embedding_engine"))
-cur.execute("UPDATE config SET value = json(?), updated_at = ? WHERE key = ?", (json.dumps("'"${EMBED_MODEL}"'"), now, "rag.embedding_model"))
+cur.execute('UPDATE config SET value = json(?), updated_at = ? WHERE key = ?', (json.dumps('ollama'), now, 'rag.embedding_engine'))
+cur.execute('UPDATE config SET value = json(?), updated_at = ? WHERE key = ?', (json.dumps('${EMBED_MODEL}'), now, 'rag.embedding_model'))
 conn.commit()
 conn.close()
-' 2>&1
+" 2>&1
 
 echo "  ✅ WebUI native RAG set to: engine=ollama, model=${EMBED_MODEL}"
 echo ""
@@ -315,6 +345,16 @@ fi
 GLOBAL_RESPONSE=$(curl -s -X POST "${WEBUI_URL}/api/v1/functions/${FUNCTION_ID}/toggle/global" \
   -H "Authorization: Bearer ${TOKEN}" 2>/dev/null)
 echo "  ✅ Set as global filter"
+
+# Belt-and-suspenders: enforce is_global=1 directly in DB (API toggle can be unreliable)
+_docker exec openwebui python3 -c "
+import sqlite3
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('UPDATE function SET is_active=1, is_global=1 WHERE id=\"${FUNCTION_ID}\"')
+conn.commit()
+conn.close()
+" 2>/dev/null
 echo ""
 
 # ==========================================

@@ -7,13 +7,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "ollama")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 EXCLUDE_DIRS = {"admin", "logs", "backups", "docker", "postgres", "node_modules", ".git", "venv"}
@@ -34,38 +33,6 @@ DB_CONFIG = {
 }
 
 
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".xlsx", ".csv", ".html", ".eml"}
-
-
-def extract_text(filepath):
-    """Extract text content from supported file formats."""
-    ext = os.path.splitext(filepath)[1].lower()
-    if ext in (".md", ".txt", ".csv", ".eml"):
-        with open(filepath, "r", errors="ignore") as f:
-            return f.read().strip()
-    elif ext == ".pdf":
-        import fitz
-        doc = fitz.open(filepath)
-        return "\n".join(page.get_text() for page in doc).strip()
-    elif ext == ".docx":
-        from docx import Document
-        doc = Document(filepath)
-        return "\n".join(p.text for p in doc.paragraphs).strip()
-    elif ext == ".xlsx":
-        from openpyxl import load_workbook
-        wb = load_workbook(filepath, read_only=True, data_only=True)
-        lines = []
-        for ws in wb.worksheets:
-            for row in ws.iter_rows(values_only=True):
-                lines.append(" | ".join(str(c) if c is not None else "" for c in row))
-        return "\n".join(lines).strip()
-    elif ext == ".html":
-        from bs4 import BeautifulSoup
-        with open(filepath, "r", errors="ignore") as f:
-            return BeautifulSoup(f.read(), "html.parser").get_text(separator="\n").strip()
-    return ""
-
-
 def get_files(paths):
     """Collect all indexable files, excluding admin/logs/backups/docker/postgres/.git."""
     files = []
@@ -80,34 +47,19 @@ def get_files(paths):
                 ext = os.path.splitext(f)[1].lower()
                 if ext in EXCLUDE_EXTENSIONS:
                     continue
-                if ext in SUPPORTED_EXTENSIONS:
+                if ext in (".md", ".txt"):
                     files.append(os.path.join(root, f))
     return files
 
 
 def chunk_text(text, chunk_size=512, overlap=64):
-    """Split text into chunks, preferring markdown section boundaries."""
-    import re
-    # Split on markdown section separators first
-    sections = re.split(r'\n---\n|\n## ', text)
+    """Split text into overlapping chunks."""
     chunks = []
-    for i, section in enumerate(sections):
-        # Re-add the heading prefix stripped by split (except first)
-        if i > 0 and not section.startswith('#'):
-            section = '## ' + section
-        section = section.strip()
-        if not section:
-            continue
-        # If section fits in one chunk, keep it whole
-        if len(section) <= chunk_size:
-            chunks.append(section)
-        else:
-            # Fall back to size-based splitting for large sections
-            start = 0
-            while start < len(section):
-                end = start + chunk_size
-                chunks.append(section[start:end])
-                start += chunk_size - overlap
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
     return [c for c in chunks if c.strip()]
 
 
@@ -125,73 +77,20 @@ def get_embedding(text):
         raise NotImplementedError(f"Embedding provider \"{EMBEDDING_PROVIDER}\" not yet supported.")
 
 
-def ensure_schema(cur):
-    """Ensure tables exist with correct embedding dimensions. Recreate if dimensions changed."""
-    cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='rag_chunks')")
-    table_exists = cur.fetchone()[0]
-
-    if table_exists:
-        # Check current dimension
-        cur.execute("""
-            SELECT atttypmod FROM pg_attribute
-            WHERE attrelid = 'rag_chunks'::regclass AND attname = 'embedding'
-        """)
-        row = cur.fetchone()
-        current_dim = row[0] if row else 0
-        if current_dim != EMBEDDING_DIMENSIONS:
-            print(f"Embedding dimensions changed ({current_dim} → {EMBEDDING_DIMENSIONS}). Recreating tables...")
-            cur.execute("DROP TABLE IF EXISTS rag_chunks CASCADE")
-            cur.execute("DROP TABLE IF EXISTS rag_documents CASCADE")
-            table_exists = False
-
-    if not table_exists:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS rag_documents (
-                id SERIAL PRIMARY KEY,
-                client_name VARCHAR(255) NOT NULL,
-                source_path TEXT NOT NULL,
-                title VARCHAR(500),
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS rag_chunks (
-                id SERIAL PRIMARY KEY,
-                document_id INTEGER REFERENCES rag_documents(id) ON DELETE CASCADE,
-                client_name VARCHAR(255) NOT NULL,
-                source_path TEXT NOT NULL,
-                title VARCHAR(500),
-                chunk_text TEXT NOT NULL,
-                embedding vector({EMBEDDING_DIMENSIONS}),
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_chunks_client ON rag_chunks(client_name)")
-        print(f"Created tables with embedding dimension={EMBEDDING_DIMENSIONS}")
-
-
 def index():
     """Main indexing pipeline."""
     files = get_files(INDEX_PATHS)
     print(f"Found {len(files)} files to index.")
-    print(f"Embedding model: {EMBEDDING_MODEL} (dimensions={EMBEDDING_DIMENSIONS})")
 
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
-
-    ensure_schema(cur)
-    conn.commit()
 
     cur.execute("DELETE FROM rag_chunks WHERE client_name = %s", (ACTIVE_CLIENT,))
     cur.execute("DELETE FROM rag_documents WHERE client_name = %s", (ACTIVE_CLIENT,))
 
     for filepath in files:
-        try:
-            content = extract_text(filepath)
-        except Exception as e:
-            print(f"  Skipping {filepath}: {e}")
-            continue
+        with open(filepath, "r", errors="ignore") as f:
+            content = f.read().strip()
 
         if not content:
             continue
@@ -207,10 +106,8 @@ def index():
 
         chunks = chunk_text(content)
         for chunk in chunks:
-            # Prepend source context to improve embedding relevance
-            embed_text = f"[Source: {title} for {ACTIVE_CLIENT}] {chunk}"
             try:
-                embedding = get_embedding(embed_text)
+                embedding = get_embedding(chunk)
             except Exception as e:
                 print(f"  Embedding failed for chunk in {title}: {e}")
                 continue
@@ -223,16 +120,6 @@ def index():
         print(f"  Indexed: {rel_path} ({len(chunks)} chunks)")
 
     conn.commit()
-
-    # Rebuild ivfflat index after data is inserted
-    cur.execute("SELECT COUNT(*) FROM rag_chunks")
-    row_count = cur.fetchone()[0]
-    lists = max(1, min(int(row_count ** 0.5), row_count // 10))
-    print(f"Rebuilding ivfflat index (lists={lists} for {row_count} rows)...")
-    cur.execute("DROP INDEX IF EXISTS idx_chunks_embedding")
-    cur.execute(f"CREATE INDEX idx_chunks_embedding ON rag_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = {lists})")
-    conn.commit()
-
     cur.close()
     conn.close()
     print("Indexing complete.")

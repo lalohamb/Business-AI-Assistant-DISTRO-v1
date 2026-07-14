@@ -15,6 +15,7 @@
 # Override via environment:
 #   DRY_RUN=true ./admin/install.sh
 #   SAFE_MODE=false ./admin/install.sh
+#   FORCE_WORKFLOWS=true ./admin/install.sh
 #
 #
 #
@@ -29,6 +30,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
 DRY_RUN=${DRY_RUN:-false}
 SAFE_MODE=${SAFE_MODE:-true}
+
+# Log all output to file
+mkdir -p "$BASE_PATH/logs"
+LOG_FILE="$BASE_PATH/logs/install.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== Install started: $(date) ==="
 
 # ==========================================
 # TRACKING ARRAYS
@@ -53,7 +60,7 @@ _docker() {
   fi
 }
 
-TOTAL_TASKS=19
+TOTAL_TASKS=20
 
 prompt_user() {
   local phase_name="$1"
@@ -434,6 +441,29 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 # ==========================================
+# PRE-FLIGHT — System Requirements Check
+# ==========================================
+echo "=== PRE-FLIGHT — System Requirements Check ==="
+echo ""
+
+if [ -f "$SCRIPT_DIR/system_minreq_check.sh" ]; then
+  bash "$SCRIPT_DIR/system_minreq_check.sh"
+  PREFLIGHT_EXIT=$?
+  echo ""
+  if [ "$PREFLIGHT_EXIT" -ne 0 ]; then
+    echo "  ❌ System does not meet minimum requirements."
+    read -p "  Continue anyway? [y/n]: " preflight_choice
+    if [ "$preflight_choice" != "y" ] && [ "$preflight_choice" != "Y" ]; then
+      echo "  Aborting install."
+      exit 1
+    fi
+  fi
+else
+  echo "  system_minreq_check.sh not found. Skipping pre-flight."
+fi
+echo ""
+
+# ==========================================
 # PHASE 0 — Project Scaffold
 # ==========================================
 echo "=== PHASE 0 — Project Scaffold ==="
@@ -500,11 +530,34 @@ ENV_FILE="$BASE_PATH/.env"
 
 if [ -f "$ENV_FILE" ]; then
   ENV_EXISTED="yes"
-  echo ".env already exists. Loading without overwrite."
+  echo ".env already exists."
   CURRENT_CLIENT=$(grep "^ACTIVE_CLIENT=" "$ENV_FILE" | cut -d= -f2)
   echo "  Active client: ${CURRENT_CLIENT:-not set}"
-  echo "  To change: ./admin/switch_client.sh <new-client>"
-else
+  echo ""
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would prompt: keep, edit, or recreate .env"
+  else
+    echo "  Options:"
+    echo "    [1] Keep current .env (no changes)"
+    echo "    [2] Recreate .env from scratch (backup created)"
+    echo ""
+    read -p "  Choice [1/2]: " env_choice
+    case "$env_choice" in
+      2)
+        backup_file "$ENV_FILE"
+        rm -f "$ENV_FILE"
+        ENV_EXISTED="no"
+        echo "  Old .env backed up. Will create new one below."
+        ;;
+      *)
+        echo "  Keeping existing .env."
+        echo "  To change: edit .env directly or ./admin/switch_client.sh <new-client>"
+        ;;
+    esac
+  fi
+fi
+
+if [ ! -f "$ENV_FILE" ]; then
   ENV_EXISTED="no"
   if [ "$DRY_RUN" = true ]; then
     log_dry "Would create .env with interactive prompts."
@@ -592,7 +645,11 @@ else
     esac
 
     cat > "$ENV_FILE" <<EOF
+# ══════════════════════════════════════════════════════════════
 # Business Assistant Box Configuration
+# ══════════════════════════════════════════════════════════════
+
+# ── AI Provider ───────────────────────────────────────────────
 AI_PROVIDER=${AI_PROVIDER}
 LOCAL_LLM_ENABLED=${LOCAL_LLM_ENABLED}
 OPENCLAW_API_KEY=${OPENCLAW_API_KEY}
@@ -601,31 +658,45 @@ OPENCLAW_WORKSPACE_PATH=${BASE_PATH}/openclaw
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=${OLLAMA_MODEL}
 
-# PostgreSQL credentials
+# ── Internal Database (machine-to-machine, NOT a browser login) ──
+# These credentials are set automatically when the PostgreSQL container
+# is first created. Do NOT change after install unless you recreate the container.
+# This is NOT your Open WebUI or n8n password.
 PG_HOST=localhost
 PG_PORT=5432
 PG_USER=admin
 PG_PASSWORD=strongpassword
 PG_DATABASE=businessassistant
 
+# ── Embeddings & RAG ─────────────────────────────────────────
 EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}
 EMBEDDING_MODEL=${EMBEDDING_MODEL}
 EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
 ACTIVE_CLIENT=${ACTIVE_CLIENT}
 BASE_PATH=${BASE_PATH}
+RAG_ENABLED=true
+
+# ── Obsidian ─────────────────────────────────────────────────
 OBSIDIAN_ENABLED=${OBSIDIAN_ENABLED}
 OBSIDIAN_VAULT_PATH=${BASE_PATH}/current-client
-RAG_ENABLED=true
+
+# ── Browser Services (create your own account on first visit) ──
+# Open WebUI: http://localhost:3000 — first user becomes admin
+# n8n:        http://localhost:5678 — first user becomes owner
+# These apps manage their own passwords internally. Nothing to set here.
 DASHBOARD_ENABLED=true
 WORKFLOW_ENGINE=n8n
 N8N_BASE_URL=http://localhost:5678
 N8N_API_KEY=
 OPENWEBUI_BASE_URL=http://localhost:3000
+
+# ── Behavior ─────────────────────────────────────────────────
 BUSINESS_BUTTONS_ENABLED=true
 APPROVAL_REQUIRED_FOR_EMAIL_SEND=true
 EOF
 
-    echo ".env created at $ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    echo ".env created at $ENV_FILE (permissions: 600)"
     FILES_CREATED+=("$ENV_FILE")
   fi
 fi
@@ -759,41 +830,56 @@ if [ "$DRY_RUN" = false ] && command -v docker &>/dev/null; then
   docker --version 2>/dev/null || sudo docker --version
   docker compose version 2>/dev/null || sudo docker compose version 2>/dev/null || true
 
-  # Pre-emptive socket fix: apt post-install often fails because docker.socket
-  # isn't active yet. Reset failed state and ensure socket is up before checking.
+  # Clean up stale PID files that prevent daemon start after crash/kill
+  for pidfile in /var/run/docker.pid /var/run/docker/containerd/containerd.pid; do
+    if [ -f "$pidfile" ]; then
+      pid=$(cat "$pidfile" 2>/dev/null)
+      if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+        sudo rm -f "$pidfile"
+        echo "  Removed stale PID file: $pidfile"
+      fi
+    fi
+  done
+
+  # Reset failed state and ensure socket is active (fd:// activation dependency)
   sudo systemctl reset-failed docker.service 2>/dev/null || true
+  sudo systemctl enable docker.socket 2>/dev/null || true
   sudo systemctl start docker.socket 2>/dev/null || true
-  sleep 2
 
   if docker info &>/dev/null || sudo docker info &>/dev/null; then
     echo "  ✅ Docker daemon is running."
     DOCKER_AVAILABLE=true
   else
-    echo "  Docker daemon not running. Starting..."
-    # Reset any failed state from apt post-install trigger
-    sudo systemctl reset-failed docker.service 2>/dev/null || true
+    echo "  Docker daemon not running. Starting (up to 60s)..."
     sudo systemctl stop docker.service 2>/dev/null || true
-    # Socket must be active before service starts (fd:// activation)
-    sudo systemctl enable docker.socket 2>/dev/null
-    sudo systemctl start docker.socket 2>/dev/null
-    sleep 2
-    # Now start the service
     sudo systemctl enable docker.service 2>/dev/null
     sudo systemctl start docker.service 2>/dev/null
-    sleep 5
-    # Verify
-    if docker info &>/dev/null || sudo docker info &>/dev/null; then
-      echo "  ✅ Docker daemon started successfully."
-      DOCKER_AVAILABLE=true
-    else
-      # One more attempt with longer wait
-      echo "  Retrying (10s wait)..."
+
+    # Retry loop: 60 seconds, 5-second intervals
+    DOCKER_AVAILABLE=false
+    for attempt in $(seq 1 12); do
+      sleep 5
+      if docker info &>/dev/null || sudo docker info &>/dev/null; then
+        echo "  ✅ Docker daemon started successfully (${attempt}x5s)."
+        DOCKER_AVAILABLE=true
+        break
+      fi
+      echo "  Waiting... (${attempt}/12)"
+    done
+
+    # Last resort: full restart cycle
+    if [ "$DOCKER_AVAILABLE" = false ]; then
+      echo "  Timeout reached. Attempting full restart cycle..."
+      sudo systemctl stop docker.service docker.socket 2>/dev/null || true
+      sleep 3
+      sudo systemctl start docker.socket 2>/dev/null
+      sudo systemctl start docker.service 2>/dev/null
       sleep 10
       if docker info &>/dev/null || sudo docker info &>/dev/null; then
-        echo "  ✅ Docker daemon started successfully."
+        echo "  ✅ Docker daemon started after full restart."
         DOCKER_AVAILABLE=true
       else
-        log_warn "Docker daemon failed to start. Run: sudo journalctl -xeu docker.service"
+        log_warn "Docker daemon failed to start after 75s. Run: sudo journalctl -xeu docker.service"
         DOCKER_AVAILABLE=false
       fi
     fi
@@ -826,7 +912,7 @@ else
     -e POSTGRES_USER=${PG_USER:-admin} \
     -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
     -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
-    -p 5432:5432 \
+    -p 127.0.0.1:5432:5432 \
     -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data"
 
   # Wait for postgres to be ready, detect restart loop
@@ -853,7 +939,7 @@ else
         -e POSTGRES_USER=${PG_USER:-admin} \
         -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
         -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
-        -p 5432:5432 \
+        -p 127.0.0.1:5432:5432 \
         -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data" \
         pgvector/pgvector:pg16
       echo "  Container recreated. Waiting for startup..."
@@ -1216,12 +1302,17 @@ with open('$json_file', 'w') as fh:
         fi
 
         # Check if already exists
+        container_path=$(echo "$json_file" | sed "s|$BASE_PATH/n8n|/home/node/.n8n|")
         if echo "$EXISTING_WORKFLOWS" | grep -qF "$wf_name"; then
-          echo "  Exists: $wf_name"
-          ((SKIP_COUNT++))
+          if [ "${FORCE_WORKFLOWS:-false}" = true ]; then
+            result=$(_docker exec n8n n8n import:workflow --input="$container_path" 2>&1)
+            echo "  ♻️  Updated: $wf_name"
+            ((IMPORT_COUNT++))
+          else
+            echo "  Exists: $wf_name"
+            ((SKIP_COUNT++))
+          fi
         else
-          # Convert host path to container path
-          container_path=$(echo "$json_file" | sed "s|$BASE_PATH/n8n|/home/node/.n8n|")
           result=$(_docker exec n8n n8n import:workflow --input="$container_path" 2>&1)
           if echo "$result" | grep -q "Successfully imported"; then
             echo "  ✅ Imported: $wf_name"
@@ -1492,7 +1583,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")
@@ -1627,7 +1718,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")
@@ -1756,9 +1847,10 @@ if [ "$OBSIDIAN_ENABLED" = "true" ]; then
     echo "    Then select 'Open folder as vault' → $RESOLVED_VAULT"
   fi
 
-  # Create/update Obsidian setup notes
+  # Create Obsidian setup notes (only if missing — content is static)
   OBSIDIAN_NOTES="$BASE_PATH/admin/OBSIDIAN_SETUP.md"
-  OBSIDIAN_CONTENT="# Obsidian Setup (Native)
+  if [ ! -f "$OBSIDIAN_NOTES" ]; then
+    OBSIDIAN_CONTENT="# Obsidian Setup (Native)
 
 ## Launch
 
@@ -1796,7 +1888,8 @@ Obsidian is the **Human Editable Business Brain**.
 The RAG indexer reads from the Obsidian vault path and indexes into PostgreSQL + pgvector.
 Run \`./vector-db/venv/bin/python3 ./vector-db/index_vault.py\` after editing client documents."
 
-  safe_write_file "$OBSIDIAN_NOTES" "$OBSIDIAN_CONTENT" "Obsidian native installation documentation"
+    safe_write_file "$OBSIDIAN_NOTES" "$OBSIDIAN_CONTENT" "Obsidian native installation documentation"
+  fi
 else
   echo "  Obsidian disabled in .env. Skipping."
 fi
@@ -1898,7 +1991,7 @@ class Filter:
         pg_password: str = Field(default="strongpassword")  # override in WebUI Admin → Functions → Valves
         pg_database: str = Field(default="businessassistant")
         ollama_url: str = Field(default="http://host.docker.internal:11434")
-        embedding_model: str = Field(default="nomic-embed-text")
+        embedding_model: str = Field(default="${EMBEDDING_MODEL:-nomic-embed-text}")
         active_client: str = Field(default="")
         top_k: int = Field(default=8)
         similarity_threshold: float = Field(default=0.3)
@@ -2008,8 +2101,11 @@ class Filter:
         return body
 RAGEOF
 
+  # Heredoc is single-quoted (no expansion), so replace the embedding model placeholder
+  sed -i "s|\${EMBEDDING_MODEL:-nomic-embed-text}|${EMBEDDING_MODEL:-nomic-embed-text}|g" "$RAG_FILTER_FILE"
+
   FILES_CREATED+=("$RAG_FILTER_FILE")
-  echo "  ✅ RAG filter function written: $RAG_FILTER_FILE"
+  echo "  ✅ RAG filter function written: $RAG_FILTER_FILE (embedding_model=${EMBEDDING_MODEL:-nomic-embed-text})"
 
   echo ""
   echo "RAG function file: $RAG_FILTER_FILE"
@@ -2031,6 +2127,12 @@ if [ ! -f "$INDEX_SCRIPT" ]; then
   echo "  ⚠️  index_vault.py not found. Skipping."
   WARNINGS+=("Client indexing skipped — script not found")
 else
+  echo "  Unloading chat models from VRAM for faster indexing..."
+  for model in $(ollama ps 2>/dev/null | tail -n +2 | awk '{print $1}'); do
+    ollama stop "$model" 2>/dev/null && echo "    Unloaded: $model"
+  done
+  sleep 2
+
   echo "  Activating venv and indexing client files..."
   if [ -f "$VENV_PATH/bin/activate" ]; then
     (
@@ -2117,9 +2219,30 @@ conn.close()
   _docker restart openwebui >/dev/null 2>&1
   echo "  ✅ OpenWebUI restarted"
 
+  # Wait for OpenWebUI to fully initialize before touching DB again
+  echo "  Waiting for OpenWebUI to finish startup..."
+  sleep 15
+  for i in $(seq 1 12); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null)
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "303" ]; then
+      break
+    fi
+    sleep 5
+  done
+
+  # Re-enforce is_global=1 AFTER restart (OpenWebUI startup can reset it)
+  _docker exec openwebui python3 -c "
+import sqlite3
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('UPDATE function SET is_active=1, is_global=1 WHERE id=\"business_knowledge_rag\"')
+conn.commit()
+conn.close()
+print('  ✅ RAG filter confirmed global after restart')
+" 2>&1
+
   # Set default system prompt so the model always knows its identity
   echo "  Setting default system prompt..."
-  sleep 15
   _docker exec openwebui python3 -c "
 import sqlite3, json, time
 prompt = '''You are a Business Assistant. You help the business owner manage daily operations, answer questions from company knowledge, and draft communications.
@@ -2143,10 +2266,61 @@ print('OK')
 fi
 echo ""
 
-prompt_user "PHASE 12 — Register RAG Filter" "" "RAG pipeline fully configured.
+prompt_user "PHASE 12 — Register RAG Filter" "PHASE 12B — Apply Branding" "RAG pipeline fully configured.
 - Filter: business_knowledge_rag (active + global)
 - The filter auto-injects business context into every chat.
 - To re-index after editing client files: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py" 19
+
+# ==========================================
+# PHASE 12B — Apply Branding (Custom CSS + Title)
+# ==========================================
+echo "=== PHASE 12B — Apply Branding ==="
+echo ""
+
+# This phase applies custom CSS and UI title to Open WebUI.
+# Source file: $BASE_PATH/dashboard/custom.css
+# Re-run anytime: ./admin/apply_branding.sh
+
+CSS_FILE="$BASE_PATH/dashboard/custom.css"
+
+if [ "$DRY_RUN" = true ]; then
+  log_dry "Would apply custom CSS and title to Open WebUI"
+elif [ "$DOCKER_AVAILABLE" = false ]; then
+  echo "  ❌ SKIPPED: Docker not available."
+elif [ ! -f "$CSS_FILE" ]; then
+  echo "  ⚠️  No custom CSS file found at $CSS_FILE. Skipping."
+else
+  # Copy CSS into the container's static directory
+  _docker cp "$CSS_FILE" openwebui:/app/backend/open_webui/static/custom.css 2>/dev/null
+  echo "  ✅ Custom CSS deployed"
+
+  # Remove crossorigin attribute that blocks CSS loading
+  _docker exec openwebui sed -i 's|href="/static/custom.css" crossorigin="use-credentials"|href="/static/custom.css"|g' /app/build/index.html 2>/dev/null || true
+  echo "  ✅ index.html patched (crossorigin removed)"
+
+  # Set UI title
+  _docker exec openwebui python3 -c "
+import sqlite3, json, time
+name = 'Business AI Assistant'
+now_ts = int(time.time())
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT key FROM config WHERE key = ?', ('ui.name',))
+if cur.fetchone():
+    cur.execute('UPDATE config SET value = ?, updated_at = ? WHERE key = ?', (json.dumps(name), now_ts, 'ui.name'))
+else:
+    cur.execute('INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?)', ('ui.name', json.dumps(name), now_ts))
+conn.commit()
+conn.close()
+" 2>/dev/null
+  echo "  ✅ UI title set: Business AI Assistant"
+fi
+echo ""
+
+prompt_user "PHASE 12B — Apply Branding" "" "Custom branding applied.
+- CSS source: dashboard/custom.css (edit anytime)
+- Re-apply after updates: ./admin/apply_branding.sh
+- Hard-refresh browser to see changes (Ctrl+Shift+R)" 20
 
 # ==========================================
 # FINAL SUMMARY

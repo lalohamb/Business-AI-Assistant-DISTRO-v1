@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")

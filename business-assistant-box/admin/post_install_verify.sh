@@ -322,6 +322,58 @@ fi
 echo ""
 
 # ==========================================
+# TEST 9C — Branding (Custom CSS + Title)
+# ==========================================
+echo "=== TEST 9C — Branding ==="
+
+CSS_SOURCE="$BASE_PATH/dashboard/custom.css"
+if [ -f "$CSS_SOURCE" ] && [ -s "$CSS_SOURCE" ]; then
+  pass "CSS source exists: dashboard/custom.css"
+else
+  warn "No custom CSS source at dashboard/custom.css (branding disabled)"
+fi
+
+# Check if CSS is deployed inside container
+if _docker ps --filter "name=^openwebui$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "^openwebui$"; then
+  CONTAINER_CSS=$(_docker exec openwebui cat /app/backend/open_webui/static/custom.css 2>/dev/null)
+  if [ -n "$CONTAINER_CSS" ]; then
+    pass "Custom CSS deployed in container"
+  else
+    fail "Custom CSS NOT deployed in container"
+    if [ "$DRY_RUN" = false ] && [ -f "$CSS_SOURCE" ]; then
+      echo "  Attempting repair: ./admin/apply_branding.sh"
+      bash "$SCRIPT_DIR/apply_branding.sh" 2>/dev/null
+      if [ $? -eq 0 ]; then
+        fixed "Branding re-applied"
+      else
+        fail "apply_branding.sh failed"
+      fi
+    fi
+  fi
+
+  # Check crossorigin attribute removed
+  CROSSORIGIN=$(_docker exec openwebui grep 'custom.css.*crossorigin' /app/build/index.html 2>/dev/null)
+  if [ -z "$CROSSORIGIN" ]; then
+    pass "index.html crossorigin patch applied"
+  else
+    fail "index.html still has crossorigin on custom.css (CSS won't load in browser)"
+    if [ "$DRY_RUN" = false ]; then
+      _docker exec openwebui sed -i 's|href="/static/custom.css" crossorigin="use-credentials"|href="/static/custom.css"|g' /app/build/index.html 2>/dev/null
+      fixed "crossorigin attribute removed"
+    fi
+  fi
+
+  # Verify CSS is served
+  SERVED_CSS=$(curl -s --max-time 5 http://localhost:3000/static/custom.css 2>/dev/null)
+  if echo "$SERVED_CSS" | grep -q "color"; then
+    pass "Custom CSS served at /static/custom.css"
+  else
+    fail "Custom CSS not served (empty or unreachable)"
+  fi
+fi
+echo ""
+
+# ==========================================
 # TEST 10 — Port Summary
 # ==========================================
 echo "=== TEST 10 — Port Summary ==="

@@ -27,6 +27,17 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Check .env permissions
+ENV_PERMS=$(stat -c "%a" "$ENV_FILE" 2>/dev/null)
+if [ "$ENV_PERMS" = "600" ]; then
+  echo "✅ .env permissions: 600 (owner-only)"
+else
+  echo "⚠️  .env permissions: $ENV_PERMS (should be 600)"
+  echo "  Fix: chmod 600 $ENV_FILE"
+  ((WARNINGS++))
+fi
+echo ""
+
 source "$ENV_FILE"
 
 echo "=== REQUIRED KEYS ==="
