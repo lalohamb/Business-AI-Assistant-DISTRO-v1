@@ -97,14 +97,20 @@ Restrict access.
 
 Database must never be publicly exposed.
 
-PostgreSQL is bound to `127.0.0.1:5432` (localhost only). Docker containers reach it
-via `host.docker.internal`. This prevents any remote network access to the database.
+PostgreSQL is bound to `0.0.0.0:5432` (all interfaces on the host). This is required
+so Docker containers (openwebui, n8n) can reach it via `host.docker.internal`.
+Binding to `127.0.0.1` breaks the RAG pipeline — containers connect via the Docker
+bridge (172.17.0.1), not localhost.
+
+To prevent external network exposure, use a firewall to block port 5432 from
+outside the machine:
+
+    sudo ufw deny 5432
+    sudo ufw allow from 172.17.0.0/16 to any port 5432
 
 If you need remote access (e.g. external BI tool), use an SSH tunnel:
 
-    ssh -L 5432:127.0.0.1:5432 user@your-server
-
-Never change the bind to `0.0.0.0:5432` unless behind a firewall.
+    ssh -L 5432:localhost:5432 user@your-server
 
 ---
 

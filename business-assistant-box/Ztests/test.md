@@ -96,9 +96,9 @@ Layer 7: End-to-end (full stack integration)
 |---|------|---------|----------|
 | 6.1 | ACTIVE_CLIENT set | `grep ACTIVE_CLIENT .env` | Non-empty value |
 | 6.2 | Client folder exists | `ls clients/$ACTIVE_CLIENT/` | Directory listing |
-| 6.3 | Required files present | `ls clients/$ACTIVE_CLIENT/{CLIENT_PROFILE,BUSINESS_KNOWLEDGE,FAQ,OWNER_PREFERENCES}.md` | All 4 exist |
+| 6.3 | Required files present | `ls clients/$ACTIVE_CLIENT/{BUSINESS_PROFILE,BUSINESS_KNOWLEDGE,FAQ,OWNER_PREFERENCES}.md` | All 4 exist |
 | 6.4 | Files have content | `wc -l clients/$ACTIVE_CLIENT/BUSINESS_KNOWLEDGE.md` | > 20 lines |
-| 6.5 | Not identical to template | `diff clients/$ACTIVE_CLIENT/CLIENT_PROFILE.md clients/templates/CLIENT_PROFILE.md` | Files differ |
+| 6.5 | Not identical to template | `diff clients/$ACTIVE_CLIENT/BUSINESS_PROFILE.md clients/templates/BUSINESS_PROFILE.md` | Files differ |
 | 6.6 | MEMORY populated | `cat clients/$ACTIVE_CLIENT/MEMORY/TODAY.md \| wc -l` | > 5 lines |
 | 6.7 | DOCUMENTS has files | `find clients/$ACTIVE_CLIENT/DOCUMENTS -type f \| wc -l` | > 0 |
 | 6.8 | Full client test | `bash admin/test_client.sh $ACTIVE_CLIENT` | READY or ACCEPTABLE |
@@ -109,7 +109,7 @@ Layer 7: End-to-end (full stack integration)
 
 | # | Test | Command | Expected |
 |---|------|---------|----------|
-| 7.1 | RAG retrieval from container | Ask "What does this company do?" via WebUI | Answer cites CLIENT_PROFILE.md or BUSINESS_KNOWLEDGE.md |
+| 7.1 | RAG retrieval from container | Ask "What does this company do?" via WebUI | Answer cites BUSINESS_PROFILE.md or BUSINESS_KNOWLEDGE.md |
 | 7.2 | Anti-hallucination works | Ask about something NOT in documents | "I don't have that information in our records" |
 | 7.3 | Source citation present | Any RAG-answered question | Response includes `[source_file.md]` reference |
 | 7.4 | Daily briefing generates | Trigger daily-briefing workflow in n8n | Briefing output written to storage |

@@ -318,6 +318,117 @@ cd /home/ubuntu/.business-assistant-box/business-assistant-box
 
 ---
 
+## Issue 8 — System Prompt Silently Ignored
+
+Date: 2026-07-15
+
+Component: Open WebUI configuration / `model` table
+
+Phase: Phase 12 — Register RAG Filter
+
+Issue Description: System prompt set via `ui.default_system_prompt` in the config table had no effect. Model responded generically with no business identity.
+
+Symptoms:
+- Model doesn't identify as the business assistant
+- No rules enforcement (email approval, no fabrication)
+- Config table row exists but is ignored at runtime
+
+Root Cause: Current Open WebUI versions ignore `ui.default_system_prompt` in the config table entirely. The only working mechanism is a row in the `model` table where `id` and `base_model_id` both match the Ollama model name.
+
+Resolution: Write directly to the `model` table:
+```bash
+docker exec openwebui python3 -c "
+import sqlite3, json, time
+model_id = 'llama3.2:latest'
+prompt = 'You are the Business Assistant for Pinnacle Insurance Group...'
+now_ts = int(time.time())
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+cur.execute('SELECT id FROM model WHERE id=?', (model_id,))
+if cur.fetchone():
+    params = json.loads(cur.execute('SELECT params FROM model WHERE id=?', (model_id,)).fetchone()[0] or '{}')
+    params['system'] = prompt
+    cur.execute('UPDATE model SET params=?, updated_at=? WHERE id=?', (json.dumps(params), now_ts, model_id))
+else:
+    cur.execute('INSERT INTO model (id, user_id, base_model_id, name, params, meta, is_active, updated_at, created_at) VALUES (?,"system",?,?,?,?,1,?,?)',
+        (model_id, model_id, model_id, json.dumps({'system': prompt}), '{}', now_ts, now_ts))
+conn.commit()
+conn.close()
+"
+```
+
+Prevention: `install.sh` Phase 12 updated to use the `model` table approach. Business name read from `BUSINESS_PROFILE.md`, model ID from `OLLAMA_MODEL` in `.env`.
+
+Status: Resolved
+
+---
+
+## Issue 9 — Embedding Model Default Mismatch on Fresh Install
+
+Date: 2026-07-15
+
+Component: `install.sh` / RAG pipeline
+
+Phase: Phase 0B (env setup), Phase 7B (schema), Phase 10 (RAG filter)
+
+Issue Description: Fresh install with default choices produced a broken RAG pipeline. The installer menu defaulted to `nomic-embed-text` (768 dims) but the live system used `snowflake-arctic-embed:335m` (1024 dims). Schema was built with 768 dims, filter used wrong model, all RAG queries returned garbage.
+
+Symptoms:
+- RAG filter returns no results or irrelevant results on fresh install
+- `e2e_validate.sh` Phase 7 fails: "Embedding returns X dims but .env says Y"
+- Schema dimension mismatch error in Phase 5
+
+Root Cause: `nomic-embed-text` was hardcoded as the default in 5 separate places: the interactive menu catch-all, the Ollama pull fallback, the pre-warm curl, the RAG filter heredoc, and both Python script heredocs. None were consistent with each other or with the live system.
+
+Resolution: Updated all defaults to `snowflake-arctic-embed:335m` / 1024 dims. Added model-aware dimension inference in `install.sh` so setting only `EMBEDDING_MODEL` in `.env` is sufficient.
+
+Prevention:
+- `install.sh` menu reordered: `snowflake-arctic-embed:335m` is option 1 and default
+- `EMBEDDING_DIMENSIONS` inferred from model name if not set in `.env`
+- `switch_embedding.sh` fallback defaults corrected
+
+Status: Resolved
+
+---
+
+## Issue 10 — RAG top_k=8 Cutting Off Relevant Chunks
+
+Date: 2026-07-15
+
+Component: `business_rag_filter.py` / RAG pipeline
+
+Phase: Runtime
+
+Issue Description: Business queries were missing relevant chunks that ranked at positions 9-12.
+
+Symptoms:
+- Model gives incomplete answers on multi-faceted questions
+- Known content (e.g. `CUSTOMER_INTAKE.md`, `employee-handbook-summary.md`) not surfacing
+- `system/` files (TOOLS.md, AGENTS.md) appearing in top 8 for business queries
+
+Root Cause: `snowflake-arctic-embed:335m` produces a flat score distribution. For the query "What carriers does Pinnacle work with?", positions 9-15 scored 0.569-0.600 — all genuinely relevant client chunks. k=8 cut them off. Additionally, system files scored similarly to client files and consumed top-8 slots.
+
+Resolution: Raised `top_k` from 8 to 12 in `business_rag_filter.py`, `install.sh` heredoc, and `.env`.
+
+Diagnostic command used:
+```bash
+docker exec openwebui python3 -c "
+import requests, psycopg2
+resp = requests.post('http://host.docker.internal:11434/api/embeddings', json={'model':'snowflake-arctic-embed:335m','prompt':'What carriers does Pinnacle work with?'}, timeout=60)
+emb = resp.json()['embedding']
+emb_str = '[' + ','.join(str(x) for x in emb) + ']'
+conn = psycopg2.connect(host='host.docker.internal', port=5432, user='admin', password='strongpassword', dbname='businessassistant')
+cur = conn.cursor()
+cur.execute('SELECT source_path, 1-(embedding <=> %s::vector) FROM rag_chunks WHERE client_name=%s ORDER BY 2 DESC LIMIT 15', (emb_str, 'insurance-agency'))
+for i, r in enumerate(cur.fetchall(), 1): print(i, f'{r[1]:.3f}', r[0])
+conn.close()
+"
+```
+
+Status: Resolved
+
+---
+
 ## Lessons Learned
 
 1. **Open WebUI expects integer timestamps** — Never use `datetime("now")` in direct SQLite inserts. Always use `int(time.time())`.
@@ -327,3 +438,7 @@ cd /home/ubuntu/.business-assistant-box/business-assistant-box
 5. **System prompt ≠ RAG chunks** — Identity/rules must be in the system prompt, not competing with business content for retrieval slots.
 6. **Environment variables need explicit passing** — Docker containers don't inherit host env vars. Use `-e VAR=value` on `docker run`.
 7. **n8n env vars require container recreation** — `docker restart` doesn't pick up new `-e` flags. Must `docker rm` + `docker run`.
+8. **Open WebUI ignores `ui.default_system_prompt`** — Current versions only read system prompts from the `model` table. Always write to `model` with `base_model_id` matching the Ollama model ID.
+9. **Embedding model defaults must be consistent everywhere** — The menu default, schema dimensions, RAG filter, and Python scripts must all agree. A single stale default silently breaks the entire RAG pipeline.
+10. **`snowflake-arctic-embed:335m` has a flat score distribution** — Scores don't drop sharply after the top result. Use `top_k=12` minimum; `top_k=8` cuts off genuinely relevant chunks at positions 9-12.
+11. **Docker postgres binding must be `0.0.0.0`** — `-p 127.0.0.1:5432:5432` blocks Docker container access via the bridge network. Use `-p 5432:5432` and rely on UFW for external blocking.

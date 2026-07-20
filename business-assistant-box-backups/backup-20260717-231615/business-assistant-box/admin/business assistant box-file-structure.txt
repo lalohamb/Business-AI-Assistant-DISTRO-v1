@@ -1,0 +1,96 @@
+business-assistant-box/
+
+├── admin/
+│   │
+│   ├── BUILD_PLAN.md
+│   ├── INSTALL_STEPS.md
+│   ├── CHECKLIST.md
+│   ├── SECURITY.md
+│   ├── TROUBLESHOOTING.md
+│   ├── COMMANDS.md
+│   ├── ACCEPTANCE_TESTS.md
+│   ├── DEPLOYMENT.md
+│   ├── PROJECT_STATUS.md
+│   ├── NEXT_ACTIONS.md
+│   ├── CHANGELOG.md
+│   ├── ROADMAP.md
+│   └── ARCHITECTURE.md
+│
+├── system/
+│   │
+│   ├── AGENTS.md
+│   ├── POLICIES.md
+│   ├── IDENTITY.md
+│   ├── HEARTBEAT.md
+│   ├── TOOLS.md
+│   ├── PROMPTS.md
+│   └── SYSTEM_MEMORY.md
+│
+├── clients/
+│   │
+│   ├── template/
+│   │   │
+│   │   ├── CLIENT_PROFILE.md
+│   │   ├── OWNER_PREFERENCES.md
+│   │   ├── BUSINESS_KNOWLEDGE.md
+│   │   ├── FAQ.md
+│   │   │
+│   │   ├── PROCEDURES/
+│   │   │   ├── EMAIL.md
+│   │   │   ├── CALENDAR.md
+│   │   │   ├── DOCUMENTS.md
+│   │   │   ├── DAILY_BRIEFING.md
+│   │   │   ├── CUSTOMER_INTAKE.md
+│   │   │   ├── SALES.md
+│   │   │   ├── CUSTOMER_SUPPORT.md
+│   │   │   └── INVOICES.md
+│   │   │
+│   │   ├── MEMORY/
+│   │   │   ├── LEARNED_PATTERNS.md
+│   │   │   ├── CUSTOMER_RULES.md
+│   │   │   ├── VENDOR_RULES.md
+│   │   │   ├── OPEN_TASKS.md
+│   │   │   └── TODAY.md
+│   │   │
+│   │   ├── OUTPUTS/
+│   │   │   ├── drafts/
+│   │   │   ├── reports/
+│   │   │   └── summaries/
+│   │   │
+│   │   └── DOCUMENTS/
+│   │
+│   ├── demo-company/
+│   │
+│   ├── pehgc/
+│   │
+│   └── future-client/
+│
+├── vault/
+│   │
+│   ├── company-documents/
+│   ├── policies/
+│   ├── contracts/
+│   ├── handbooks/
+│   ├── financials/
+│   ├── websites/
+│   └── uploads/
+│
+├── postgres/
+│
+├── vector-db/
+│
+├── docker/
+│   │
+│   ├── docker-compose.yml
+│   ├── .env
+│   └── backups/
+│
+├── dashboard/
+│
+├── n8n/
+│
+├── openclaw/
+│
+├── logs/
+│
+└── backups/

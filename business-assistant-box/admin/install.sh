@@ -238,7 +238,7 @@ print_summary() {
 
   # pgvector status
   echo -n "pgvector:           "
-  if _docker exec -i postgres psql -U admin businessassistant -t -c "SELECT 1 FROM pg_extension WHERE extname='vector'" 2>/dev/null | grep -q 1; then
+  if _docker exec -i postgres psql -U admin businessassistant -t -c 'SELECT 1 FROM pg_extension WHERE extname=$$vector$$' 2>/dev/null | grep -q 1; then
     echo "✅ Enabled"
   else
     echo "❌ Not enabled"
@@ -246,7 +246,7 @@ print_summary() {
 
   # RAG schema status
   echo -n "RAG schema:         "
-  if _docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('rag_documents','rag_chunks')" 2>/dev/null | grep -q 2; then
+  if _docker exec -i postgres psql -U admin businessassistant -t -c 'SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ($$rag_documents$$,$$rag_chunks$$)' 2>/dev/null | grep -q 2; then
     echo "✅ Deployed"
   else
     echo "⚠️  Not deployed"
@@ -473,7 +473,7 @@ if [ "$DRY_RUN" = true ]; then
   log_dry "Would create directory structure (mkdir -p, safe)"
 else
   # Root directories
-  for dir in admin system clients postgres vector-db dashboard n8n openclaw docker logs backups; do
+  for dir in admin system clients postgres postgres/data vector-db dashboard dashboard/functions n8n openclaw docker logs backups; do
     mkdir -p "$BASE_PATH/$dir"
   done
 
@@ -505,7 +505,7 @@ for f in BUILD_PLAN.md INSTALL_STEPS.md CHECKLIST.md SECURITY.md TROUBLESHOOTING
 done
 
 # Template client files (only create if missing)
-for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
   create_placeholder "$BASE_PATH/clients/templates/$f"
 done
 for f in EMAIL.md CALENDAR.md DAILY_BRIEFING.md DOCUMENTS.md; do
@@ -594,15 +594,15 @@ if [ ! -f "$ENV_FILE" ]; then
     if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
       echo ""
       echo "  Embedding model options:"
-      echo "    [1] nomic-embed-text       — 768 dims, fast, good general-purpose (default)"
-      echo "    [2] mxbai-embed-large      — 1024 dims, better accuracy, slower"
-      echo "    [3] snowflake-arctic-embed  — 1024 dims, enterprise/retrieval focused"
+      echo "    [1] snowflake-arctic-embed:335m — 1024 dims, enterprise/retrieval focused (default)"
+      echo "    [2] mxbai-embed-large           — 1024 dims, better accuracy, slower"
+      echo "    [3] nomic-embed-text            — 768 dims, fast, good general-purpose"
       echo ""
       read -p "  Embedding model [1/2/3]: " embed_model_choice
       case "$embed_model_choice" in
         2) EMBEDDING_MODEL="mxbai-embed-large"; EMBEDDING_DIMENSIONS=1024 ;;
-        3) EMBEDDING_MODEL="snowflake-arctic-embed"; EMBEDDING_DIMENSIONS=1024 ;;
-        *) EMBEDDING_MODEL="nomic-embed-text"; EMBEDDING_DIMENSIONS=768 ;;
+        3) EMBEDDING_MODEL="nomic-embed-text"; EMBEDDING_DIMENSIONS=768 ;;
+        *) EMBEDDING_MODEL="snowflake-arctic-embed:335m"; EMBEDDING_DIMENSIONS=1024 ;;
       esac
     else
       EMBEDDING_MODEL=""
@@ -711,8 +711,16 @@ fi
 # Override BASE_PATH with actual detected path (in case .env has stale value)
 BASE_PATH="$DETECTED_BASE_PATH"
 
-# Default EMBEDDING_DIMENSIONS if not in .env
-EMBEDDING_DIMENSIONS="${EMBEDDING_DIMENSIONS:-768}"
+# Infer EMBEDDING_DIMENSIONS from model name if not set in .env
+if [ -z "${EMBEDDING_DIMENSIONS:-}" ]; then
+  case "${EMBEDDING_MODEL:-}" in
+    *snowflake-arctic-embed:335m*|*mxbai-embed-large*) EMBEDDING_DIMENSIONS=1024 ;;
+    *snowflake-arctic-embed:s*|*all-minilm*) EMBEDDING_DIMENSIONS=384 ;;
+    *nomic-embed-text*) EMBEDDING_DIMENSIONS=768 ;;
+    *) EMBEDDING_DIMENSIONS=1024 ;;
+  esac
+  echo "  ℹ️  EMBEDDING_DIMENSIONS not set — inferred $EMBEDDING_DIMENSIONS from model '${EMBEDDING_MODEL}'"
+fi
 
 prompt_user "PHASE 0B — Environment Configuration" "PHASE 1 — Ubuntu Update & Tools" "Settings stored in: $ENV_FILE
 - Edit AI_PROVIDER, OLLAMA_MODEL, EMBEDDING_MODEL in .env to change defaults.
@@ -799,6 +807,8 @@ else
     fi
 
     echo "Installing Docker via apt (docker.io)..."
+    # Stop docker before install to prevent invoke-rc.d start failure on fresh systems
+    sudo systemctl stop docker.service docker.socket 2>/dev/null || true
     if sudo apt install -y docker.io docker-compose-v2; then
       echo "  ✅ Docker installed via apt."
     else
@@ -841,47 +851,33 @@ if [ "$DRY_RUN" = false ] && command -v docker &>/dev/null; then
     fi
   done
 
-  # Reset failed state and ensure socket is active (fd:// activation dependency)
+  # Reset failed state, start socket first (docker.service depends on fd:// from docker.socket)
   sudo systemctl reset-failed docker.service 2>/dev/null || true
   sudo systemctl enable docker.socket 2>/dev/null || true
   sudo systemctl start docker.socket 2>/dev/null || true
+  sleep 2
 
   if docker info &>/dev/null || sudo docker info &>/dev/null; then
     echo "  ✅ Docker daemon is running."
     DOCKER_AVAILABLE=true
   else
-    echo "  Docker daemon not running. Starting (up to 60s)..."
-    sudo systemctl stop docker.service 2>/dev/null || true
+    echo "  Starting Docker daemon..."
     sudo systemctl enable docker.service 2>/dev/null
     sudo systemctl start docker.service 2>/dev/null
 
-    # Retry loop: 60 seconds, 5-second intervals
+    # Retry loop: 30 seconds, 3-second intervals
     DOCKER_AVAILABLE=false
-    for attempt in $(seq 1 12); do
-      sleep 5
+    for attempt in $(seq 1 10); do
+      sleep 3
       if docker info &>/dev/null || sudo docker info &>/dev/null; then
-        echo "  ✅ Docker daemon started successfully (${attempt}x5s)."
+        echo "  ✅ Docker daemon started (${attempt}x3s)."
         DOCKER_AVAILABLE=true
         break
       fi
-      echo "  Waiting... (${attempt}/12)"
     done
 
-    # Last resort: full restart cycle
     if [ "$DOCKER_AVAILABLE" = false ]; then
-      echo "  Timeout reached. Attempting full restart cycle..."
-      sudo systemctl stop docker.service docker.socket 2>/dev/null || true
-      sleep 3
-      sudo systemctl start docker.socket 2>/dev/null
-      sudo systemctl start docker.service 2>/dev/null
-      sleep 10
-      if docker info &>/dev/null || sudo docker info &>/dev/null; then
-        echo "  ✅ Docker daemon started after full restart."
-        DOCKER_AVAILABLE=true
-      else
-        log_warn "Docker daemon failed to start after 75s. Run: sudo journalctl -xeu docker.service"
-        DOCKER_AVAILABLE=false
-      fi
+      log_warn "Docker daemon failed to start. Run: sudo journalctl -xeu docker.service"
     fi
   fi
 elif [ "$DRY_RUN" = false ]; then
@@ -912,7 +908,7 @@ else
     -e POSTGRES_USER=${PG_USER:-admin} \
     -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
     -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
-    -p 127.0.0.1:5432:5432 \
+    -p 5432:5432 \
     -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data"
 
   # Wait for postgres to be ready, detect restart loop
@@ -939,7 +935,7 @@ else
         -e POSTGRES_USER=${PG_USER:-admin} \
         -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
         -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
-        -p 127.0.0.1:5432:5432 \
+        -p 5432:5432 \
         -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data" \
         pgvector/pgvector:pg16
       echo "  Container recreated. Waiting for startup..."
@@ -1003,7 +999,7 @@ else
   prompt_user "PHASE 3 — PostgreSQL" "PHASE 4 — Optional Local AI / Ollama" "PostgreSQL credentials (set during container creation):
 - User: ${PG_USER:-admin} | Password: ${PG_PASSWORD:-strongpassword}
 - Database: businessassistant | Port: 5432
-- To change, edit this script and recreate the container." 5
+- To change: edit .env then run ./admin/change_password.sh" 5
 fi
 
 # ==========================================
@@ -1106,7 +1102,7 @@ if [ "$INSTALL_OLLAMA" = "y" ] || [ "$INSTALL_OLLAMA" = "Y" ]; then
 
     # Pull embedding model if using Ollama for embeddings
     if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
-      EMB_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+      EMB_MODEL="${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}"
       echo "Pulling embedding model: $EMB_MODEL (from .env EMBEDDING_MODEL)..."
       ollama pull "$EMB_MODEL" || log_warn "Failed to pull $EMB_MODEL."
     fi
@@ -1364,6 +1360,19 @@ else
     done <<< "$WORKFLOW_LIST"
     echo ""
     echo "  Activated: $ACTIVATED workflows"
+    echo ""
+    echo -n "  Restarting n8n to apply workflow changes... "
+    if _docker restart n8n >/dev/null 2>&1; then
+      for i in $(seq 1 30); do
+        if _docker exec n8n wget -qO- http://localhost:5678/healthz >/dev/null 2>&1; then
+          log_ok "n8n restarted and healthy"
+          break
+        fi
+        sleep 2
+      done
+    else
+      log_warn "docker restart n8n failed — restart manually: docker restart n8n"
+    fi
   else
     echo "  No workflows found to activate."
   fi
@@ -1437,7 +1446,7 @@ else
   # Explicit validation
   echo ""
   echo "Validating pgvector extension..."
-  PGV_CHECK=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT extname FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n')
+  PGV_CHECK=$(_docker exec -i postgres psql -U admin businessassistant -t -c 'SELECT extname FROM pg_extension WHERE extname=$$vector$$;' 2>/dev/null | tr -d ' \n')
 
   if [ "$PGV_CHECK" = "vector" ]; then
     echo "  ✅ pgvector extension confirmed active."
@@ -1483,9 +1492,16 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_client ON rag_chunks(client_name);
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON rag_chunks USING ivfflat (embedding vector_cosine_ops);"
+-- Note: vector index (ivfflat) is created by index_vault.py after data insertion
+-- with correct lists parameter based on actual row count."
 
-safe_write_file "$SCHEMA_FILE" "$SCHEMA_CONTENT" "RAG schema (${EMBEDDING_DIMENSIONS} dimensions)"
+# Only write schema if it doesn't exist or dimensions have changed
+EXISTING_DIM=$(grep -oP 'vector\(\K[0-9]+' "$SCHEMA_FILE" 2>/dev/null | head -1)
+if [ "$EXISTING_DIM" = "$EMBEDDING_DIMENSIONS" ]; then
+  echo "  Schema already correct (vector($EMBEDDING_DIMENSIONS)). Skipping write."
+else
+  safe_write_file "$SCHEMA_FILE" "$SCHEMA_CONTENT" "RAG schema (${EMBEDDING_DIMENSIONS} dimensions — current EMBEDDING_DIMENSIONS from .env)"
+fi
 
 # Deploy schema
 if [ "$DRY_RUN" = true ]; then
@@ -1534,8 +1550,6 @@ else
     # Ensure pip is available in venv
     python -m ensurepip --upgrade 2>/dev/null || true
     pip install --upgrade pip --quiet 2>/dev/null || true
-    pip install --quiet llama-index || log_warn "Failed to install llama-index"
-    pip install --quiet llama-index-readers-file || log_warn "Failed to install llama-index-readers-file"
     pip install --quiet psycopg2-binary || log_warn "Failed to install psycopg2-binary"
     pip install --quiet python-dotenv || log_warn "Failed to install python-dotenv"
     pip install --quiet requests || log_warn "Failed to install requests"
@@ -1572,10 +1586,14 @@ prompt_user "PHASE 8 — Python RAG Dependencies" "PHASE 8B — RAG Index + Quer
 echo "=== PHASE 8B — RAG Index + Query Scripts ==="
 echo ""
 
-# index_vault.py
+# index_vault.py — written via heredoc to avoid single-quote shell escaping issues
 INDEX_FILE="$BASE_PATH/vector-db/index_vault.py"
-INDEX_CONTENT='#!/usr/bin/env python3
-"""Index Obsidian vault and system/client files into PostgreSQL + pgvector."""
+if [ -f "$INDEX_FILE" ] && [ "$SAFE_MODE" = true ]; then
+  cp "$INDEX_FILE" "${INDEX_FILE}.bak.$(timestamp)"
+fi
+cat > "$INDEX_FILE" << 'INDEXEOF'
+#!/usr/bin/env python3
+"""Index system and client files into PostgreSQL + pgvector."""
 
 import os
 import psycopg2
@@ -1588,7 +1606,7 @@ load_dotenv(env_path, override=True)
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "ollama")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "snowflake-arctic-embed:335m")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 EXCLUDE_DIRS = {"admin", "logs", "backups", "docker", "postgres", "node_modules", ".git", "venv"}
@@ -1610,7 +1628,6 @@ DB_CONFIG = {
 
 
 def get_files(paths):
-    """Collect all indexable files, excluding admin/logs/backups/docker/postgres/.git."""
     files = []
     for base in paths:
         if not os.path.exists(base):
@@ -1629,18 +1646,15 @@ def get_files(paths):
 
 
 def chunk_text(text, chunk_size=512, overlap=64):
-    """Split text into overlapping chunks."""
     chunks = []
     start = 0
     while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
+        chunks.append(text[start:start + chunk_size])
         start += chunk_size - overlap
     return [c for c in chunks if c.strip()]
 
 
 def get_embedding(text):
-    """Get embedding vector from configured provider."""
     if EMBEDDING_PROVIDER == "ollama":
         import requests
         resp = requests.post(
@@ -1649,31 +1663,26 @@ def get_embedding(text):
         )
         resp.raise_for_status()
         return resp.json()["embedding"]
-    else:
-        raise NotImplementedError(f"Embedding provider \"{EMBEDDING_PROVIDER}\" not yet supported.")
+    raise NotImplementedError(f"Embedding provider '{EMBEDDING_PROVIDER}' not supported.")
 
 
 def index():
-    """Main indexing pipeline."""
     files = get_files(INDEX_PATHS)
     print(f"Found {len(files)} files to index.")
 
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
-
     cur.execute("DELETE FROM rag_chunks WHERE client_name = %s", (ACTIVE_CLIENT,))
     cur.execute("DELETE FROM rag_documents WHERE client_name = %s", (ACTIVE_CLIENT,))
 
     for filepath in files:
         with open(filepath, "r", errors="ignore") as f:
             content = f.read().strip()
-
         if not content:
             continue
 
         title = os.path.basename(filepath)
         rel_path = os.path.relpath(filepath, BASE_PATH)
-
         cur.execute(
             "INSERT INTO rag_documents (client_name, source_path, title) VALUES (%s, %s, %s) RETURNING id",
             (ACTIVE_CLIENT, rel_path, title),
@@ -1687,28 +1696,41 @@ def index():
             except Exception as e:
                 print(f"  Embedding failed for chunk in {title}: {e}")
                 continue
-
             cur.execute(
                 "INSERT INTO rag_chunks (document_id, client_name, source_path, title, chunk_text, embedding) VALUES (%s, %s, %s, %s, %s, %s)",
                 (doc_id, ACTIVE_CLIENT, rel_path, title, chunk, embedding),
             )
-
         print(f"  Indexed: {rel_path} ({len(chunks)} chunks)")
 
     conn.commit()
+
+    # Rebuild vector index with correct lists parameter based on actual row count
+    cur.execute("SELECT COUNT(*) FROM rag_chunks WHERE client_name = %s", (ACTIVE_CLIENT,))
+    row_count = cur.fetchone()[0]
+    lists = max(1, int(row_count ** 0.5))
+    cur.execute("DROP INDEX IF EXISTS idx_chunks_embedding")
+    cur.execute(f"CREATE INDEX idx_chunks_embedding ON rag_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists={lists})")
+    conn.commit()
+    print(f"  Vector index rebuilt (lists={lists}, {row_count} chunks)")
+
     cur.close()
     conn.close()
     print("Indexing complete.")
 
 
 if __name__ == "__main__":
-    index()'
+    index()
+INDEXEOF
+echo "  Created: $INDEX_FILE"
+FILES_CREATED+=("$INDEX_FILE")
 
-safe_write_file "$INDEX_FILE" "$INDEX_CONTENT" "RAG indexing script"
-
-# query_vault.py
+# query_vault.py — written via heredoc to avoid single-quote shell escaping issues
 QUERY_FILE="$BASE_PATH/vector-db/query_vault.py"
-QUERY_CONTENT='#!/usr/bin/env python3
+if [ -f "$QUERY_FILE" ] && [ "$SAFE_MODE" = true ]; then
+  cp "$QUERY_FILE" "${QUERY_FILE}.bak.$(timestamp)"
+fi
+cat > "$QUERY_FILE" << 'QUERYEOF'
+#!/usr/bin/env python3
 """Query the RAG database for relevant context."""
 
 import os
@@ -1723,7 +1745,7 @@ load_dotenv(env_path, override=True)
 BASE_PATH = os.getenv("BASE_PATH")
 ACTIVE_CLIENT = os.getenv("ACTIVE_CLIENT", "demo-company")
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "ollama")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "snowflake-arctic-embed:335m")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 DB_CONFIG = {
@@ -1736,7 +1758,6 @@ DB_CONFIG = {
 
 
 def get_embedding(text):
-    """Get embedding vector from configured provider."""
     if EMBEDDING_PROVIDER == "ollama":
         import requests
         resp = requests.post(
@@ -1745,17 +1766,13 @@ def get_embedding(text):
         )
         resp.raise_for_status()
         return resp.json()["embedding"]
-    else:
-        raise NotImplementedError(f"Embedding provider \"{EMBEDDING_PROVIDER}\" not yet supported.")
+    raise NotImplementedError(f"Embedding provider '{EMBEDDING_PROVIDER}' not supported.")
 
 
 def query(question, top_k=5):
-    """Retrieve top-k relevant chunks for a question."""
     embedding = get_embedding(question)
-
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
-
     cur.execute(
         """
         SELECT title, source_path, chunk_text,
@@ -1767,7 +1784,6 @@ def query(question, top_k=5):
         """,
         (embedding, ACTIVE_CLIENT, embedding, top_k),
     )
-
     results = cur.fetchall()
     cur.close()
     conn.close()
@@ -1776,20 +1792,16 @@ def query(question, top_k=5):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python query_vault.py \"your question here\"")
+        print('Usage: python query_vault.py "your question here"')
         sys.exit(1)
-
     question = " ".join(sys.argv[1:])
     print(f"Query: {question}")
     print(f"Client: {ACTIVE_CLIENT}")
     print("-" * 50)
-
     results = query(question)
-
     if not results:
         print("No results found.")
         return
-
     for i, (title, source, chunk, similarity) in enumerate(results, 1):
         print(f"\n[{i}] {title} ({source})")
         print(f"    Similarity: {similarity:.4f}")
@@ -1797,9 +1809,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()'
-
-safe_write_file "$QUERY_FILE" "$QUERY_CONTENT" "RAG query script"
+    main()
+QUERYEOF
+echo "  Created: $QUERY_FILE"
+FILES_CREATED+=("$QUERY_FILE")
 
 prompt_user "PHASE 8B — RAG Index + Query Scripts" "PHASE 9 — Obsidian (Native)" "Scripts created:
 - Index client: ./vector-db/venv/bin/python3 ./vector-db/index_vault.py
@@ -1956,7 +1969,7 @@ except Exception as e:
 
   # Pre-warm embedding model
   echo "Pre-warming embedding model (this may take 30-60s on first load)..."
-  curl -s --max-time 120 http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"warmup"}' > /dev/null 2>&1
+  curl -s --max-time 120 http://localhost:11434/api/embeddings -d "{\"model\":\"${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}\",\"prompt\":\"warmup\"}" > /dev/null 2>&1
   if [ $? -eq 0 ]; then
     echo "  ✅ Embedding model loaded"
   else
@@ -1991,13 +2004,38 @@ class Filter:
         pg_password: str = Field(default="strongpassword")  # override in WebUI Admin → Functions → Valves
         pg_database: str = Field(default="businessassistant")
         ollama_url: str = Field(default="http://host.docker.internal:11434")
-        embedding_model: str = Field(default="${EMBEDDING_MODEL:-nomic-embed-text}")
+        embedding_model: str = Field(default="${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}")
         active_client: str = Field(default="")
-        top_k: int = Field(default=8)
-        similarity_threshold: float = Field(default=0.3)
+        top_k: int = Field(default=16)
+        similarity_threshold: float = Field(default=0.15)
 
     def __init__(self):
         self.valves = self.Valves()
+
+    def _get_business_name(self) -> str:
+        """Read business name dynamically from BUSINESS_PROFILE.md chunk in pgvector."""
+        try:
+            conn = psycopg2.connect(
+                host=self.valves.pg_host,
+                port=self.valves.pg_port,
+                user=self.valves.pg_user,
+                password=self.valves.pg_password,
+                dbname=self.valves.pg_database,
+            )
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT chunk_text FROM rag_chunks WHERE title = 'BUSINESS_PROFILE.md' ORDER BY id ASC LIMIT 1"
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                for line in row[0].splitlines():
+                    if "Company Name:" in line:
+                        return line.split("Company Name:")[-1].strip()
+        except Exception:
+            pass
+        return "your business"
 
     def _get_active_client(self) -> str:
         """Return valve override if set, otherwise detect from most recent indexed client."""
@@ -2048,7 +2086,7 @@ class Filter:
                 SELECT chunk_text, source_path,
                        (1 - (embedding <=> %s::vector))
                        + CASE
-                           WHEN title IN ('CLIENT_PROFILE.md','BUSINESS_KNOWLEDGE.md','FAQ.md','OWNER_PREFERENCES.md') THEN 0.08
+                           WHEN title IN ('BUSINESS_PROFILE.md','BUSINESS_KNOWLEDGE.md','FAQ.md','OWNER_PREFERENCES.md') THEN 0.08
                            WHEN source_path LIKE 'clients/%%' THEN 0.04
                            ELSE 0.0
                          END
@@ -2093,19 +2131,17 @@ class Filter:
         for content, source, similarity in chunks:
             context_parts.append(f"[{source} | relevance: {similarity:.2f}]\n{content}")
 
-        prefix = "You are this company's Business Assistant. Use ONLY the following verified business knowledge. Cite the source file. If the answer is not in the context below, say 'I don't have that information in our records.'\n\n---\n"
+        prefix = f"You are the Business Assistant for {self._get_business_name()}. Answer directly and confidently from the following verified business knowledge. Always cite the source file. Do not say information is 'not explicitly stated' if it appears in the context below. If the answer is genuinely not present, say 'I don't have that information in our records.'\n\n---\n"
         context = prefix + "\n\n".join(context_parts) + "\n\n---\n\n"
 
         messages[-1]["content"] = context + query
         body["messages"] = messages
         return body
 RAGEOF
-
-  # Heredoc is single-quoted (no expansion), so replace the embedding model placeholder
-  sed -i "s|\${EMBEDDING_MODEL:-nomic-embed-text}|${EMBEDDING_MODEL:-nomic-embed-text}|g" "$RAG_FILTER_FILE"
+  sed -i "s|\${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}|${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}|g" "$RAG_FILTER_FILE"
 
   FILES_CREATED+=("$RAG_FILTER_FILE")
-  echo "  ✅ RAG filter function written: $RAG_FILTER_FILE (embedding_model=${EMBEDDING_MODEL:-nomic-embed-text})"
+  echo "  ✅ RAG filter function written: $RAG_FILTER_FILE (embedding_model=${EMBEDDING_MODEL:-snowflake-arctic-embed:335m})"
 
   echo ""
   echo "RAG function file: $RAG_FILTER_FILE"
@@ -2241,28 +2277,53 @@ conn.close()
 print('  ✅ RAG filter confirmed global after restart')
 " 2>&1
 
-  # Set default system prompt so the model always knows its identity
-  echo "  Setting default system prompt..."
+  # Set system prompt on the OLLAMA_MODEL in the model table
+  # NOTE: ui.default_system_prompt (config table) is ignored by current Open WebUI versions.
+  # The model table is what Open WebUI actually reads for per-model system prompts.
+  echo "  Setting system prompt on model: ${OLLAMA_MODEL:-llama3.2:latest}..."
   _docker exec openwebui python3 -c "
-import sqlite3, json, time
-prompt = '''You are a Business Assistant. You help the business owner manage daily operations, answer questions from company knowledge, and draft communications.
+import sqlite3, json, time, os
 
-Be professional, concise, and helpful. Use plain English. Summaries first, details on request. Cite your source document when answering from business knowledge.
+client_name = '${ACTIVE_CLIENT:-demo-company}'
+model_id = '${OLLAMA_MODEL:-llama3.2:latest}'
 
-Rules: Never send emails, delete records, move money, or sign anything without approval. Never fabricate facts. If you do not have the information, say so. Escalate legal threats, security incidents, and fraud immediately.'''
+# Read business name from BUSINESS_PROFILE if available
+business_name = 'your business'
+base_path = '${BASE_PATH}'
+profile_path = os.path.join(base_path, 'clients', client_name, 'BUSINESS_PROFILE.md')
+if os.path.exists(profile_path):
+    with open(profile_path) as f:
+        for line in f:
+            if 'Company Name:' in line:
+                business_name = line.split('Company Name:')[-1].strip()
+                break
+
+prompt = f'You are the Business Assistant for {business_name}. You help the business owner manage daily operations, answer questions from company knowledge, and draft communications. Be professional, concise, and helpful. Use plain English. Cite your source document when answering from business knowledge. Rules: Never send emails, delete records, move money, or sign anything without approval. Never fabricate facts. If you do not have the information, say so. Escalate legal threats, security incidents, and fraud immediately.'
+
 now_ts = int(time.time())
 conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
-cur.execute('SELECT key FROM config WHERE key = ?', ('ui.default_system_prompt',))
-if cur.fetchone():
-    cur.execute('UPDATE config SET value = ?, updated_at = ? WHERE key = ?', (json.dumps(prompt), now_ts, 'ui.default_system_prompt'))
+
+cur.execute(\"SELECT id, params FROM model WHERE id=?\", (model_id,))
+row = cur.fetchone()
+if row:
+    params = json.loads(row[1]) if row[1] else {}
+    params['system'] = prompt
+    cur.execute(\"UPDATE model SET params=?, updated_at=? WHERE id=?\", (json.dumps(params), now_ts, model_id))
+    print(f'UPDATED model {model_id}')
 else:
-    cur.execute('INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?)', ('ui.default_system_prompt', json.dumps(prompt), now_ts))
+    meta = json.dumps({'profile_image_url': '', 'description': f'Business Assistant for {business_name}', 'capabilities': {}})
+    params = json.dumps({'system': prompt})
+    cur.execute(
+        \"INSERT INTO model (id, user_id, base_model_id, name, params, meta, is_active, updated_at, created_at) VALUES (?, 'system', ?, ?, ?, ?, 1, ?, ?)\",
+        (model_id, model_id, model_id, params, meta, now_ts, now_ts)
+    )
+    print(f'CREATED model entry {model_id}')
+
 conn.commit()
 conn.close()
-print('OK')
 " 2>&1
-  echo "  ✅ Default system prompt configured"
+  echo "  ✅ System prompt set on model (model table)"
 fi
 echo ""
 

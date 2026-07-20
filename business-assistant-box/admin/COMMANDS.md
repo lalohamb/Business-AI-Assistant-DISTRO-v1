@@ -60,6 +60,15 @@ FORCE_WORKFLOWS=true ./admin/configure_n8n.sh
 # Configure RAG pipeline
 ./admin/configure_rag_pipeline.sh
 
+# Switch embedding model (updates .env, rebuilds schema, re-indexes, syncs filter)
+./admin/switch_embedding.sh
+./admin/switch_embedding.sh snowflake-arctic-embed:335m 1024
+./admin/switch_embedding.sh nomic-embed-text 768
+
+# Run full e2e validation
+./admin/e2e_validate.sh
+./admin/e2e_validate.sh --no-pause
+
 # Customize n8n UI
 ./admin/customize_ui_n8n.sh
 
@@ -213,7 +222,7 @@ ollama rm qwen3:14b
 ollama run qwen3:14b
 
 # Test embedding endpoint
-curl http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"test"}'
+curl http://localhost:11434/api/embeddings -d '{"model":"snowflake-arctic-embed:335m","prompt":"test"}'
 
 # Test generation endpoint
 curl http://localhost:11434/api/generate -d '{"model":"qwen3:14b","prompt":"Hello","stream":false}'
@@ -392,7 +401,7 @@ cp -r clients/templates clients/<new-client-name>
 grep ACTIVE_CLIENT .env
 
 # Compare client to template (check customization)
-diff clients/<client-name>/CLIENT_PROFILE.md clients/templates/CLIENT_PROFILE.md
+diff clients/<client-name>/BUSINESS_PROFILE.md clients/templates/BUSINESS_PROFILE.md
 
 # Count indexed chunks per client
 docker exec -it postgres psql -U admin -d businessassistant -c "SELECT client_name, COUNT(*) FROM rag_chunks GROUP BY client_name;"
@@ -479,7 +488,7 @@ nano .env
 cat .license
 
 # Test embedding service connectivity
-curl -s http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"test"}' | head -c 100
+curl -s http://localhost:11434/api/embeddings -d '{"model":"snowflake-arctic-embed:335m","prompt":"test"}' | python3 -c "import sys,json; print(len(json.load(sys.stdin)['embedding']), 'dims')"
 ```
 
 ---

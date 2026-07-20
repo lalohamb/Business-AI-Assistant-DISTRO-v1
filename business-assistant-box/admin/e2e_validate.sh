@@ -148,7 +148,7 @@ echo "═══ PHASE 3 — Client Content ═══"
 echo ""
 
 CLIENT_DIR="$BASE_PATH/clients/$ACTIVE_CLIENT"
-CRITICAL_FILES=("CLIENT_PROFILE.md" "BUSINESS_KNOWLEDGE.md")
+CRITICAL_FILES=("BUSINESS_PROFILE.md" "BUSINESS_KNOWLEDGE.md")
 OPTIONAL_FILES=("FAQ.md" "OWNER_PREFERENCES.md")
 
 for f in "${CRITICAL_FILES[@]}"; do
@@ -218,7 +218,7 @@ else
 fi
 
 # pgvector extension
-PGV=$(_docker exec -i postgres psql -U "${PG_USER:-admin}" "${PG_DATABASE:-businessassistant}" -t -c "SELECT extname FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n')
+PGV=$(_docker exec -i postgres psql -U "${PG_USER:-admin}" "${PG_DATABASE:-businessassistant}" -t -c 'SELECT extname FROM pg_extension WHERE extname=$$vector$$;' 2>/dev/null | tr -d ' \n')
 if [ "$PGV" = "vector" ]; then
   pass "pgvector extension enabled"
 else
@@ -226,7 +226,7 @@ else
 fi
 
 # RAG tables exist
-TABLE_COUNT=$(_docker exec -i postgres psql -U "${PG_USER:-admin}" "${PG_DATABASE:-businessassistant}" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('rag_documents','rag_chunks');" 2>/dev/null | tr -d ' \n')
+TABLE_COUNT=$(_docker exec -i postgres psql -U "${PG_USER:-admin}" "${PG_DATABASE:-businessassistant}" -t -c 'SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ($$rag_documents$$,$$rag_chunks$$);' 2>/dev/null | tr -d ' \n')
 if [ "$TABLE_COUNT" = "2" ]; then
   pass "RAG tables exist (rag_documents, rag_chunks)"
 else
@@ -453,11 +453,6 @@ if row:
     m = re.search(r'embedding_model.*?Field\(default=\"([^\"]+)\"', row[2])
     if m:
         print(f'EMBED_DEFAULT={m.group(1)}')
-    # Check identity chunk method
-    if '_get_identity_chunk' in row[2]:
-        print('HAS_IDENTITY=yes')
-    else:
-        print('HAS_IDENTITY=no')
 else:
     print('NOT_FOUND')
 " 2>/dev/null)
@@ -487,12 +482,6 @@ else
     fail "Filter default=$DB_EMBED but .env=$EMBEDDING_MODEL (dimension mismatch!)"
   fi
 
-  # Identity chunk method
-  if echo "$FILTER_DB" | grep -q "HAS_IDENTITY=yes"; then
-    pass "Filter has _get_identity_chunk method"
-  else
-    warn "Filter missing _get_identity_chunk (CLIENT_PROFILE.md won't auto-inject)"
-  fi
 fi
 
 # Filter file on disk matches what's in DB (length check)
@@ -509,7 +498,7 @@ if [ -f "$BASE_PATH/dashboard/functions/business_rag_filter.py" ]; then
     fi
   fi
 else
-  fail "business_rag_filter.py not found on disk"
+  warn "business_rag_filter.py not on disk (written by install Phase 10 — OK on fresh install)"
 fi
 
 phase_gate "PHASE 10 — RAG Filter"
@@ -663,6 +652,7 @@ SCRIPTS=(
   "$BASE_PATH/admin/switch_embedding.sh"
   "$BASE_PATH/admin/configure_rag_pipeline.sh"
   "$BASE_PATH/admin/post_install_verify.sh"
+  "$BASE_PATH/admin/configure_n8n.sh"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -693,7 +683,12 @@ PY_FILES=(
 for pyfile in "${PY_FILES[@]}"; do
   name=$(basename "$pyfile")
   if [ ! -f "$pyfile" ]; then
-    fail "$name not found"
+    # RAG filter is written at runtime by install Phase 10 — not a failure on fresh install
+    if [ "$name" = "business_rag_filter.py" ]; then
+      warn "$name not found (written by install Phase 10 — OK on fresh install)"
+    else
+      fail "$name not found"
+    fi
     continue
   fi
   PY_SYNTAX=$(python3 -c "import ast; ast.parse(open('$pyfile').read())" 2>&1)

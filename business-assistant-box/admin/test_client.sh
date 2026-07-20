@@ -59,7 +59,7 @@ echo ""
 
 STRUCT_PASS=true
 
-for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
   if [ -f "$CLIENT_PATH/$f" ]; then
     echo "  [✓] $f"
   else
@@ -139,7 +139,7 @@ check_content() {
   fi
 }
 
-check_content "$CLIENT_PATH/CLIENT_PROFILE.md" "CLIENT_PROFILE" 10
+check_content "$CLIENT_PATH/BUSINESS_PROFILE.md" "BUSINESS_PROFILE" 10
 check_content "$CLIENT_PATH/OWNER_PREFERENCES.md" "OWNER_PREFERENCES" 5
 check_content "$CLIENT_PATH/BUSINESS_KNOWLEDGE.md" "BUSINESS_KNOWLEDGE" 15
 check_content "$CLIENT_PATH/FAQ.md" "FAQ" 20
@@ -180,18 +180,18 @@ echo ""
 echo "=== TEST 4 — Company Identity ==="
 echo ""
 
-if [ -f "$CLIENT_PATH/CLIENT_PROFILE.md" ]; then
+if [ -f "$CLIENT_PATH/BUSINESS_PROFILE.md" ]; then
   # Check if company name is filled in
-  COMPANY_NAME=$(grep "Company Name" "$CLIENT_PATH/CLIENT_PROFILE.md" | head -1 | sed 's/.*Company Name[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')
+  COMPANY_NAME=$(grep "Company Name" "$CLIENT_PATH/BUSINESS_PROFILE.md" | head -1 | sed 's/.*Company Name[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')
   if [ -n "$COMPANY_NAME" ] && [ "$COMPANY_NAME" != ":" ] && [ "$COMPANY_NAME" != "" ]; then
     echo "  [✓] Company name appears set"
   else
-    echo "  ⚠️  Company name may be empty — check CLIENT_PROFILE.md"
+    echo "  ⚠️  Company name may be empty — check BUSINESS_PROFILE.md"
     ((WARNINGS++))
   fi
 
   # Check if industry is filled
-  INDUSTRY=$(grep "Industry" "$CLIENT_PATH/CLIENT_PROFILE.md" | head -1 | sed 's/.*Industry[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')
+  INDUSTRY=$(grep "Industry" "$CLIENT_PATH/BUSINESS_PROFILE.md" | head -1 | sed 's/.*Industry[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')
   if [ -n "$INDUSTRY" ] && [ "$INDUSTRY" != ":" ] && [ "$INDUSTRY" != "" ]; then
     echo "  [✓] Industry appears set"
   else
@@ -199,7 +199,7 @@ if [ -f "$CLIENT_PATH/CLIENT_PROFILE.md" ]; then
     ((WARNINGS++))
   fi
 else
-  echo "  ❌ CLIENT_PROFILE.md missing"
+  echo "  ❌ BUSINESS_PROFILE.md missing"
   ((FAILURES++))
   PASS=false
 fi
@@ -266,7 +266,7 @@ IDENTICAL=0
 CHECKED=0
 
 if [ -d "$TEMPLATE_PATH" ]; then
-  for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+  for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
     if [ -f "$CLIENT_PATH/$f" ] && [ -f "$TEMPLATE_PATH/$f" ]; then
       ((CHECKED++))
       if diff -q "$CLIENT_PATH/$f" "$TEMPLATE_PATH/$f" > /dev/null 2>&1; then
@@ -317,7 +317,7 @@ elif [ "$WARNINGS" -gt 5 ]; then
   echo "  ⚠️  MARGINAL — Client has many warnings. Review before switching."
   echo ""
   echo "  Recommend:"
-  echo "    - Fill in empty fields in CLIENT_PROFILE.md"
+  echo "    - Fill in empty fields in BUSINESS_PROFILE.md"
   echo "    - Add at least $MIN_FAQ_ENTRIES Q&A pairs to FAQ.md"
   echo "    - Add real business knowledge"
   echo "    - Run: ./admin/switch_client.sh $CLIENT --force"

@@ -72,7 +72,7 @@ Prefer:
 
 Business facts belong in:
 
-CLIENT_PROFILE.md
+BUSINESS_PROFILE.md
 
 BUSINESS_KNOWLEDGE.md
 

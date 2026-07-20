@@ -14,7 +14,7 @@
 ```
 clients/insurance-agency/
 ├── BUSINESS_KNOWLEDGE.md      ← indexed
-├── CLIENT_PROFILE.md          ← indexed
+├── BUSINESS_PROFILE.md          ← indexed
 ├── FAQ.md                     ← indexed
 ├── OWNER_PREFERENCES.md       ← indexed
 ├── PROCEDURES/                ← indexed

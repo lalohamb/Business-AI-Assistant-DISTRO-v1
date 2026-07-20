@@ -36,7 +36,7 @@ Creates from templates:
 
 ```
 clients/<client-name>/
-├── CLIENT_PROFILE.md
+├── BUSINESS_PROFILE.md
 ├── OWNER_PREFERENCES.md
 ├── BUSINESS_KNOWLEDGE.md
 ├── FAQ.md
@@ -83,7 +83,7 @@ clients/<client-name>/DOCUMENTS/
 ### Phase 5 — Validate Client Files
 
 Checks each onboarded client has:
-- All 4 root files (CLIENT_PROFILE.md, OWNER_PREFERENCES.md, BUSINESS_KNOWLEDGE.md, FAQ.md)
+- All 4 root files (BUSINESS_PROFILE.md, OWNER_PREFERENCES.md, BUSINESS_KNOWLEDGE.md, FAQ.md)
 - All 4 procedure files
 - All 5 memory files
 - All 3 output directories
@@ -120,7 +120,7 @@ Reports chunk count per client.
 
 Each client needs real business content (not just placeholders):
 
-**CLIENT_PROFILE.md:**
+**BUSINESS_PROFILE.md:**
 - Company Name
 - Industry
 - Website
@@ -197,7 +197,7 @@ If the assistant cannot answer, update the business files and re-index.
 
 A client is ready for production when:
 
-- [x] CLIENT_PROFILE.md has real content
+- [x] BUSINESS_PROFILE.md has real content
 - [x] BUSINESS_KNOWLEDGE.md has real content
 - [x] FAQ.md has at least 10 entries
 - [x] OWNER_PREFERENCES.md is configured

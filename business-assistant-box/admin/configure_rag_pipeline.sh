@@ -98,7 +98,7 @@ echo ""
 # ==========================================
 echo "=== STEP 3 — Test embedding generation from container ==="
 
-EMBED_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+EMBED_MODEL="${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}"
 EMBED_TEST=$(_docker exec openwebui python3 -c "
 import requests
 try:
@@ -254,7 +254,7 @@ echo ""
 # ==========================================
 echo "=== STEP 5B — Update filter embedding_model default ==="
 
-EMBED_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+EMBED_MODEL="${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}"
 _docker exec openwebui python3 -c "
 import sqlite3
 conn = sqlite3.connect('/app/backend/data/webui.db')
@@ -281,7 +281,7 @@ echo "=== STEP 6 — Sync function valves ==="
 VALVES_JSON=$(python3 -c "
 import json
 valves = {
-    'embedding_model': '${EMBEDDING_MODEL:-nomic-embed-text}',
+    'embedding_model': '${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}',
     'active_client': '${ACTIVE_CLIENT:-}',
     'top_k': ${RAG_TOP_K:-8}
 }
@@ -299,7 +299,7 @@ conn.close()
 print('OK')
 " "$VALVES_JSON" 2>&1
 
-echo "  ✅ Valves synced: embedding_model=${EMBEDDING_MODEL:-nomic-embed-text}, active_client=${ACTIVE_CLIENT:-auto}, top_k=${RAG_TOP_K:-8}"
+echo "  ✅ Valves synced: embedding_model=${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}, active_client=${ACTIVE_CLIENT:-auto}, top_k=${RAG_TOP_K:-8}"
 echo ""
 
 # ==========================================

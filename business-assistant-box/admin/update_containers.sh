@@ -72,7 +72,7 @@ for entry in "${CONTAINERS[@]}"; do
         -e POSTGRES_USER=${PG_USER:-admin} \
         -e POSTGRES_PASSWORD=${PG_PASSWORD:-strongpassword} \
         -e POSTGRES_DB=${PG_DATABASE:-businessassistant} \
-        -p 127.0.0.1:5432:5432 \
+        -p 5432:5432 \
         -v "$BASE_PATH/postgres/data:/var/lib/postgresql/data" \
         "$IMAGE"
       ;;

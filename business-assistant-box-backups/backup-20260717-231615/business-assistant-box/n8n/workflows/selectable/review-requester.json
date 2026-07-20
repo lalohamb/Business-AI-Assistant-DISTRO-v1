@@ -1,0 +1,117 @@
+{
+  "name": "[BAB] Review Requester",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/request-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "Review Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "request-review"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Write a short, friendly email asking a customer to leave a Google review after their service was completed. Keep it under 80 words. Be genuine, not salesy.\\n\\nCustomer name: ' + $json.body.customer_name + '\\nService completed: ' + $json.body.service_completed + '\\nCompletion date: ' + ($json.body.completion_date || 'today') + '\\nBusiness name: ' + ($json.body.business_name || 'our business') + '\\nGoogle review link: ' + ($json.body.review_link || '[REVIEW_LINK]') + '\\n\\nRespond in JSON: {\"subject\": \"...\", \"body\": \"...\", \"send_delay_hours\": 24}', stream: false }) }}"
+      },
+      "id": "ollama-draft",
+      "name": "Ollama \u2014 Draft Review Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'review_request_email', recipient: $json.body.customer_email, customer_name: $json.body.customer_name, subject: $json.subject, draft: $json.body_text, send_delay_hours: $json.send_delay_hours, requires_approval: true }) }}"
+      },
+      "id": "send-approval",
+      "name": "Route for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, status: 'review_request_queued', customer: $json.body.customer_name, scheduled_send: $json.send_delay_hours + ' hours' }) }}"
+      },
+      "id": "respond",
+      "name": "Respond \u2014 Queued",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Review Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ollama \u2014 Draft Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama \u2014 Draft Review Request": {
+      "main": [
+        [
+          {
+            "node": "Route for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route for Approval": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "selectable"
+    },
+    {
+      "name": "reviews"
+    }
+  ],
+  "id": "5451fedc6ea14eb0"
+}

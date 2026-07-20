@@ -35,8 +35,8 @@ if [ -f "$ENV_FILE" ]; then
   set -a; source "$ENV_FILE"; set +a
 fi
 
-CURRENT_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
-CURRENT_DIMS="${EMBEDDING_DIMENSIONS:-768}"
+CURRENT_MODEL="${EMBEDDING_MODEL:-snowflake-arctic-embed:335m}"
+CURRENT_DIMS="${EMBEDDING_DIMENSIONS:-1024}"
 ACTIVE_CLIENT="${ACTIVE_CLIENT:-demo-company}"
 
 echo "========================================="
@@ -151,7 +151,8 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_client ON rag_chunks(client_name);
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON rag_chunks USING ivfflat (embedding vector_cosine_ops);"
+-- Note: vector index (ivfflat) is created by index_vault.py after data insertion
+-- with correct lists parameter based on actual row count."
 
 # Update schema file
 echo "$SCHEMA_SQL" > "$BASE/vector-db/schema.sql"

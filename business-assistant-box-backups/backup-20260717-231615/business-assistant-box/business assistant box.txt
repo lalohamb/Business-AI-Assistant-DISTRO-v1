@@ -1,0 +1,143 @@
+business-assistant-box/
+├── .env
+├── .gitignore
+├── .license
+├── current-client@ → clients/{ACTIVE_CLIENT}/
+├── admin/
+│   ├── _googleignore/
+│   ├── ACCEPTANCE_TESTS.md
+│   ├── ARCHITECTURE.md
+│   ├── AWS_PROPOSED_ARCHITECTURE.md
+│   ├── birth.md
+│   ├── BUILD_PLAN.md
+│   ├── Business_Assistant_Box.md
+│   ├── CHANGELOG.md
+│   ├── CHECKLIST.md
+│   ├── CLIENT_ROUTING.md
+│   ├── CLOUD_MULTI_TENANT_ARCHITECTURE.md
+│   ├── CLOUD_MULTI_TENANT_PRICING.md
+│   ├── CLOUD_MULTI_TENANT_PRICING_TIERS.md
+│   ├── CLOUD_MULTI_TENANT_PROPOSAL_TEMPLATE.md
+│   ├── COMMANDS.md
+│   ├── configure_credentials.sh
+│   ├── configure_n8n.sh
+│   ├── configure_rag_pipeline.sh
+│   ├── current_client.sh
+│   ├── customize_ui_n8n.sh
+│   ├── DEPLOYMENT.md
+│   ├── E2E-Test-Results.md
+│   ├── install.sh
+│   ├── INSTALL_STEPS.md
+│   ├── license_check.sh
+│   ├── list_clients.sh
+│   ├── NEW_MACHINE_SETUP.md
+│   ├── NEXT_ACTIONS.md
+│   ├── OBSIDIAN_SETUP.md
+│   ├── OpenClaw.md
+│   ├── package.sh
+│   ├── POST_INSTALL_CLIENT_SETUP.md
+│   ├── post_install_client_setup.sh
+│   ├── post_install_verify.sh
+│   ├── PRE_CHECK.md
+│   ├── pre_check.sh
+│   ├── PROJECT_STATUS.md
+│   ├── quickstart.md
+│   ├── quickstart.sh
+│   ├── ROADMAP.md
+│   ├── Running.md
+│   ├── SCRIPT_LAYERS.md
+│   ├── SECURITY.md
+│   ├── switch_client.sh
+│   ├── system_minreq_check.sh
+│   ├── Tech-Manuals.md
+│   ├── test_client.sh
+│   ├── TROUBLESHOOTING.md
+│   ├── uninstall.sh
+│   ├── validate_client.sh
+│   ├── validate_env.sh
+│   ├── VAULT_INDEXING.md
+│   ├── WORKFLOW_SETUP.md
+│   └── zip_package.sh
+├── system/
+│   ├── AGENTS.md
+│   ├── HEARTBEAT.md
+│   ├── IDENTITY.md
+│   ├── POLICIES.md
+│   ├── PROMPTS.md
+│   ├── SYSTEM_MEMORY.md
+│   └── TOOLS.md
+├── clients/
+│   ├── templates/
+│   ├── demo-company/
+│   ├── insurance-agency/        ← ACTIVE_CLIENT
+│   ├── law-office/
+│   └── acme-roofing/
+│       (each client contains:)
+│       ├── CLIENT_PROFILE.md
+│       ├── BUSINESS_KNOWLEDGE.md
+│       ├── FAQ.md
+│       ├── OWNER_PREFERENCES.md
+│       ├── DAILY_BRIEFING.md
+│       ├── DOCUMENTS/
+│       │   ├── company-documents/
+│       │   ├── contracts/
+│       │   ├── financials/
+│       │   ├── handbooks/
+│       │   ├── uploads/
+│       │   └── websites/
+│       ├── MEMORY/
+│       │   ├── CUSTOMER_RULES.md
+│       │   ├── VENDOR_RULES.md
+│       │   ├── LEARNED_PATTERNS.md
+│       │   ├── OPEN_TASKS.md
+│       │   └── TODAY.md
+│       ├── OUTPUTS/
+│       │   ├── drafts/
+│       │   ├── reports/
+│       │   └── summaries/
+│       └── PROCEDURES/
+│           ├── EMAIL.md
+│           ├── CALENDAR.md
+│           ├── CUSTOMER_INTAKE.md
+│           ├── DAILY_BRIEFING.md
+│           └── DOCUMENTS.md
+├── dashboard/
+│   ├── functions/
+│   │   └── business_rag_filter.py
+│   ├── webui.db
+│   ├── cache/
+│   ├── uploads/
+│   └── vector_db/
+├── vector-db/
+│   ├── index_vault.py
+│   ├── query_vault.py
+│   └── schema.sql
+├── n8n/
+│   ├── workflows/
+│   │   ├── manifest.json
+│   │   ├── standard/
+│   │   │   ├── email-triage.json
+│   │   │   ├── calendar-review.json
+│   │   │   ├── daily-briefing.json
+│   │   │   ├── approval-router.json
+│   │   │   ├── ask-assistant.json
+│   │   │   └── rag-query.json
+│   │   └── selectable/
+│   │       ├── appointment-booking.json
+│   │       ├── customer-intake.json
+│   │       ├── document-drafting.json
+│   │       ├── expense-tracker.json
+│   │       ├── invoice-generator.json
+│   │       ├── lead-followup.json
+│   │       ├── report-generator.json
+│   │       ├── review-requester.json
+│   │       ├── social-post-scheduler.json
+│   │       └── voicemail-transcription.json
+│   ├── config
+│   └── database.sqlite
+├── postgres/
+│   └── data/
+├── openclaw/
+├── docker/
+├── logs/
+└── backups/

@@ -99,7 +99,7 @@ Answer using company information.
 
 Priority Sources:
 
-1. CLIENT_PROFILE.md
+1. BUSINESS_PROFILE.md
 2. BUSINESS_KNOWLEDGE.md
 3. FAQ.md
 4. Vault Documents

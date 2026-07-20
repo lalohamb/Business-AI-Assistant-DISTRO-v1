@@ -111,10 +111,10 @@ This is a **read-only** script — it never modifies files.
 
 | Test | What It Checks |
 |------|----------------|
-| 1 — File Structure | Required files exist (`CLIENT_PROFILE.md`, `OWNER_PREFERENCES.md`, `BUSINESS_KNOWLEDGE.md`, `FAQ.md`, `PROCEDURES/*.md`, `MEMORY/*.md`, `OUTPUTS/` subdirs) |
+| 1 — File Structure | Required files exist (`BUSINESS_PROFILE.md`, `OWNER_PREFERENCES.md`, `BUSINESS_KNOWLEDGE.md`, `FAQ.md`, `PROCEDURES/*.md`, `MEMORY/*.md`, `OUTPUTS/` subdirs) |
 | 2 — Content Quality | Files have real content (not just headers/placeholders). Minimum line counts enforced. |
 | 3 — FAQ Entries | At least 10 `Q:` entries in `FAQ.md` |
-| 4 — Company Identity | `Company Name` and `Industry` fields are filled in `CLIENT_PROFILE.md` |
+| 4 — Company Identity | `Company Name` and `Industry` fields are filled in `BUSINESS_PROFILE.md` |
 | 5 — RAG Indexability | Enough `.md`/`.txt` files exist, total content is sufficient, embedding service (Ollama) is reachable |
 | 6 — Differentiation | Files are not identical to `clients/templates/` (i.e., actually customized) |
 

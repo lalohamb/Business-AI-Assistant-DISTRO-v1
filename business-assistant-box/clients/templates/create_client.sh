@@ -45,7 +45,7 @@ echo "Creating client: $CLIENT_SLUG"
 mkdir -p "$TARGET_DIR"/{DOCUMENTS/{company-documents,contracts,financials,handbooks,uploads,websites},MEMORY,OUTPUTS/{drafts,reports,summaries},PROCEDURES}
 
 # --- Copy template files ---
-for f in CLIENT_PROFILE.md BUSINESS_KNOWLEDGE.md FAQ.md OWNER_PREFERENCES.md DAILY_BRIEFING.md; do
+for f in BUSINESS_PROFILE.md BUSINESS_KNOWLEDGE.md FAQ.md OWNER_PREFERENCES.md DAILY_BRIEFING.md; do
     if [ -f "$TEMPLATE_DIR/$f" ]; then
         cp "$TEMPLATE_DIR/$f" "$TARGET_DIR/$f"
     fi
@@ -70,7 +70,7 @@ echo ""
 echo "✅ Client created: $TARGET_DIR"
 echo ""
 echo "Next steps:"
-echo "  1. Edit the files in $TARGET_DIR/ (start with CLIENT_PROFILE.md)"
+echo "  1. Edit the files in $TARGET_DIR/ (start with BUSINESS_PROFILE.md)"
 echo "  2. Add documents to $TARGET_DIR/DOCUMENTS/"
 echo "  3. Set active client:  sed -i 's/^ACTIVE_CLIENT=.*/ACTIVE_CLIENT=$CLIENT_SLUG/' $PROJECT_ROOT/.env"
 echo "  4. Index:  source $PROJECT_ROOT/../venv/bin/activate && python3 $PROJECT_ROOT/vector-db/index_vault.py"

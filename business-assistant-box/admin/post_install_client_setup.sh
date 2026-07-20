@@ -109,7 +109,7 @@ print_summary() {
   fi
   echo ""
   echo "  Next steps:"
-  echo "    1. Edit CLIENT_PROFILE.md, BUSINESS_KNOWLEDGE.md, FAQ.md for each client"
+  echo "    1. Edit BUSINESS_PROFILE.md, BUSINESS_KNOWLEDGE.md, FAQ.md for each client"
   echo "    2. Add business documents to clients/<name>/DOCUMENTS/"
   echo "    3. Re-run this script to re-index"
   echo "    4. Run pre_check.sh with ACTIVE_CLIENT=<client-name>"
@@ -350,7 +350,7 @@ for client in "${CLIENTS[@]}"; do
 
   echo "Validating: $client"
 
-  for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+  for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
     if [ -f "$CLIENT_PATH/$f" ]; then
       echo "  [✓] $f"
     else

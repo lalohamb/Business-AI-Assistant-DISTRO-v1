@@ -172,12 +172,12 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:14b
 EMBEDDING_PROVIDER=ollama
 # Embedding model options (change EMBEDDING_DIMENSIONS to match):
-#   nomic-embed-text       -> 768 dimensions (default, fast)
-#   mxbai-embed-large      -> 1024 dimensions (better accuracy)
-#   snowflake-arctic-embed -> 1024 dimensions (enterprise focused)
-EMBEDDING_MODEL=nomic-embed-text
+#   snowflake-arctic-embed:335m -> 1024 dimensions (best retrieval accuracy, recommended)
+#   mxbai-embed-large           -> 1024 dimensions (good accuracy)
+#   nomic-embed-text            -> 768 dimensions (fast, general-purpose)
+EMBEDDING_MODEL=snowflake-arctic-embed:335m
 # Must match model above
-EMBEDDING_DIMENSIONS=768
+EMBEDDING_DIMENSIONS=1024
 ACTIVE_CLIENT=my-business
 BASE_PATH=
 OBSIDIAN_ENABLED=true
@@ -235,12 +235,12 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:14b
 EMBEDDING_PROVIDER=ollama
 # Embedding model options (change EMBEDDING_DIMENSIONS to match):
-#   nomic-embed-text       -> 768 dimensions (default, fast)
-#   mxbai-embed-large      -> 1024 dimensions (better accuracy)
-#   snowflake-arctic-embed -> 1024 dimensions (enterprise focused)
-EMBEDDING_MODEL=nomic-embed-text
+#   snowflake-arctic-embed:335m -> 1024 dimensions (best retrieval accuracy, recommended)
+#   mxbai-embed-large           -> 1024 dimensions (good accuracy)
+#   nomic-embed-text            -> 768 dimensions (fast, general-purpose)
+EMBEDDING_MODEL=snowflake-arctic-embed:335m
 # Must match model above
-EMBEDDING_DIMENSIONS=768
+EMBEDDING_DIMENSIONS=1024
 ACTIVE_CLIENT=my-business
 BASE_PATH=
 OBSIDIAN_ENABLED=true

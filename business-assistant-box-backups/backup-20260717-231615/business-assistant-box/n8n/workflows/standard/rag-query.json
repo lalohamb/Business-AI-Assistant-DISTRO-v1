@@ -1,0 +1,110 @@
+{
+  "name": "[BAB] RAG Query",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business/rag-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trigger-1",
+      "name": "RAG Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "rag-query"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'Extract the core search intent from this user question. Return only 2-3 key phrases for semantic search, no explanation:\\n\\nQuestion: ' + $json.body.query, stream: false }) }}"
+      },
+      "id": "ollama-extract",
+      "name": "Ollama \u2014 Extract Search Terms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'nomic-embed-text', prompt: $json.body.query }) }}"
+      },
+      "id": "embed-query",
+      "name": "Embed Query \u2014 Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'SELECT title, chunk_text, source_path, 1 - (embedding <=> ' + \"'\" + JSON.stringify($json.embedding) + \"'\" + '::vector) AS similarity FROM rag_chunks WHERE client_name = ' + \"'\" + ($('RAG Webhook').item.json.body.client_name || 'demo-company') + \"'\" + ' ORDER BY embedding <=> ' + \"'\" + JSON.stringify($json.embedding) + \"'\" + '::vector LIMIT 5' }}",
+        "options": {}
+      },
+      "id": "pgvector-search",
+      "name": "pgvector \u2014 Similarity Search",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, 0],
+      "credentials": {
+        "postgres": {
+          "id": "8FrndbcfoT3Hqb5P",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a business assistant. Answer the user\\'s question using ONLY the following business context. If the context doesn\\'t contain the answer, say so.\\n\\nContext:\\n' + $('pgvector \\u2014 Similarity Search').all().map(c => c.json.chunk_text).join('\\n---\\n') + '\\n\\nQuestion: ' + $('RAG Webhook').item.json.body.query + '\\n\\nAnswer concisely and professionally.', stream: false }) }}"
+      },
+      "id": "ollama-answer",
+      "name": "Ollama \u2014 Generate Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: $json.response, sources: $('pgvector \\u2014 Similarity Search').all().map(c => c.json.source_path), query: $('RAG Webhook').item.json.body.query }) }}"
+      },
+      "id": "respond",
+      "name": "Respond with Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 0]
+    }
+  ],
+  "connections": {
+    "RAG Webhook": {
+      "main": [[{ "node": "Ollama \u2014 Extract Search Terms", "type": "main", "index": 0 }]]
+    },
+    "Ollama \u2014 Extract Search Terms": {
+      "main": [[{ "node": "Embed Query \u2014 Ollama", "type": "main", "index": 0 }]]
+    },
+    "Embed Query \u2014 Ollama": {
+      "main": [[{ "node": "pgvector \u2014 Similarity Search", "type": "main", "index": 0 }]]
+    },
+    "pgvector \u2014 Similarity Search": {
+      "main": [[{ "node": "Ollama \u2014 Generate Answer", "type": "main", "index": 0 }]]
+    },
+    "Ollama \u2014 Generate Answer": {
+      "main": [[{ "node": "Respond with Answer", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "standard" }, { "name": "rag" }],
+  "id": "b10667b7ca634bf4"
+}

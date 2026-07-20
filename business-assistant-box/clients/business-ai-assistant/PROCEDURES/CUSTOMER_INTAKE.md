@@ -14,7 +14,7 @@ bash clients/templates/create_client.sh {client-slug}
 ```
 
 Step 2: Fill in core files
-- CLIENT_PROFILE.md — company info, personnel, services
+- BUSINESS_PROFILE.md — company info, personnel, services
 - BUSINESS_KNOWLEDGE.md — processes, systems, terminology
 - FAQ.md — common questions and answers
 - OWNER_PREFERENCES.md — communication style, decision rules

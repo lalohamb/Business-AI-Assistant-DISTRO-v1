@@ -131,7 +131,7 @@ clients/templates/
 
 Required Files:
 
-CLIENT_PROFILE.md
+BUSINESS_PROFILE.md
 OWNER_PREFERENCES.md
 BUSINESS_KNOWLEDGE.md
 FAQ.md

@@ -142,7 +142,7 @@ Create:
 ├── POLICIES.md
 ├── IDENTITY.md
 ├── MEMORY.md
-├── CLIENT_PROFILE.md
+├── BUSINESS_PROFILE.md
 ├── PROCEDURES/
 ├── MEMORY/
 └── OUTPUTS/
@@ -200,7 +200,7 @@ Create admin account.
 
 ```
 clients/demo-company/
-├── CLIENT_PROFILE.md
+├── BUSINESS_PROFILE.md
 ├── FAQ.md
 ├── BUSINESS_KNOWLEDGE.md
 ├── PROCEDURES/

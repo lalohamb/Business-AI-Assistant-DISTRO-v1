@@ -161,7 +161,7 @@ Expected Location: `clients/${ACTIVE_CLIENT}/`
 
 Required Files:
 
-- [ ] CLIENT_PROFILE.md
+- [ ] BUSINESS_PROFILE.md
 - [ ] OWNER_PREFERENCES.md
 - [ ] BUSINESS_KNOWLEDGE.md
 - [ ] FAQ.md

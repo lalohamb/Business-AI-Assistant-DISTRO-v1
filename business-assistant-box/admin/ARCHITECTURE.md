@@ -93,7 +93,7 @@ GPU pinning: Ollama is locked to the RTX 2060 SUPER via `CUDA_VISIBLE_DEVICES` U
 | Prompts | system/PROMPTS.md |
 | Tools | system/TOOLS.md |
 | System Memory | system/SYSTEM_MEMORY.md |
-| Client Profile | clients/{client}/CLIENT_PROFILE.md |
+| Client Profile | clients/{client}/BUSINESS_PROFILE.md |
 | Business Knowledge | clients/{client}/BUSINESS_KNOWLEDGE.md |
 | Owner Preferences | clients/{client}/OWNER_PREFERENCES.md |
 | FAQ | clients/{client}/FAQ.md |
@@ -188,7 +188,7 @@ business-assistant-box/
 │   ├── demo-company/           # Demo (124 RAG chunks)
 │   ├── acme-roofing/           # Acme Roofing & Exteriors (82 chunks)
 │   ├── law-office/             # Carter & Associates, PLLC (84 chunks)
-│   └── insurance-agency/       # Pinnacle Insurance Group (not yet indexed)
+│   └── insurance-agency/       # Pinnacle Insurance Group (98 chunks indexed)
 ├── clients/                    # Per-client knowledge & documents
 │   ├── company-documents/
 │   ├── financials/
@@ -235,7 +235,7 @@ business-assistant-box/
 
 ```
 clients/{name}/
-├── CLIENT_PROFILE.md       # Company identity, contacts, hours
+├── BUSINESS_PROFILE.md       # Company identity, contacts, hours
 ├── BUSINESS_KNOWLEDGE.md   # Services, pricing, processes
 ├── OWNER_PREFERENCES.md    # Communication style, priorities
 ├── FAQ.md                  # Common questions + answers

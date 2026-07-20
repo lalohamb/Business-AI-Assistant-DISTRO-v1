@@ -81,7 +81,7 @@ Search company knowledge.
 
 Sources:
 
-* CLIENT_PROFILE.md
+* BUSINESS_PROFILE.md
 * BUSINESS_KNOWLEDGE.md
 * FAQ.md
 * Vault Documents
@@ -262,7 +262,7 @@ Immediately escalate:
 
 When answering questions:
 
-1. CLIENT_PROFILE.md
+1. BUSINESS_PROFILE.md
 2. BUSINESS_KNOWLEDGE.md
 3. FAQ.md
 4. Runtime Memory

@@ -1,0 +1,214 @@
+{
+  "name": "[BAB] Calendar Review",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Daily 7 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "authentication": "oAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeMin",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "timeMax",
+              "value": "={{ new Date(Date.now() + 86400000).toISOString() }}"
+            },
+            {
+              "name": "singleEvents",
+              "value": "true"
+            },
+            {
+              "name": "orderBy",
+              "value": "startTime"
+            }
+          ]
+        }
+      },
+      "id": "fetch-events",
+      "name": "Fetch Today's Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "GCAL_CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: (.OLLAMA_MODEL || 'qwen3:14b'), prompt: 'You are a calendar assistant for a small business owner. Review today\\'s schedule and provide:\\n1. Summary of the day\\n2. Any scheduling conflicts\\n3. Suggested prep for each meeting\\n4. Gaps that could be used productively\\n\\nToday\\'s events:\\n' + JSON.stringify($json.items || []) + '\\n\\nRespond in JSON: {\"summary\": \"...\", \"conflicts\": [...], \"prep_notes\": [...], \"available_gaps\": [...], \"recommendations\": [...]}', stream: false }) }}"
+      },
+      "id": "ollama-review",
+      "name": "Ollama \u2014 Review Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.conflicts?.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ]
+        }
+      },
+      "id": "has-conflicts",
+      "name": "Has Conflicts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/business/approval-router",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'calendar_conflict', conflicts: $json.conflicts, recommendations: $json.recommendations, requires_approval: true }) }}"
+      },
+      "id": "flag-conflicts",
+      "name": "Flag Conflicts for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "reviewed"
+            },
+            {
+              "name": "summary",
+              "value": "={{ $json.summary }}"
+            }
+          ]
+        }
+      },
+      "id": "log-clean",
+      "name": "Log Clean Schedule",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 7 AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch Today's Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Today's Events": {
+      "main": [
+        [
+          {
+            "node": "Ollama \u2014 Review Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama \u2014 Review Schedule": {
+      "main": [
+        [
+          {
+            "node": "Has Conflicts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Conflicts?": {
+      "main": [
+        [
+          {
+            "node": "Flag Conflicts for Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Clean Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "standard"
+    },
+    {
+      "name": "calendar"
+    }
+  ],
+  "id": "927a8799551149d2"
+}

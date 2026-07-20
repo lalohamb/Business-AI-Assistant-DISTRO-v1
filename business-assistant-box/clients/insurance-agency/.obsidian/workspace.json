@@ -11,10 +11,14 @@
             "id": "8e1847e8e3035b16",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "FAQ.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "FAQ"
             }
           }
         ]
@@ -176,8 +180,13 @@
       "bases:Create new base": false
     }
   },
-  "active": "4df71f16c69d16ba",
+  "active": "8e1847e8e3035b16",
   "lastOpenFiles": [
+    "BUSINESS_PROFILE.md",
+    "CONTACT.md",
+    "DAILY_BRIEFING.md",
+    "CLIENT_PROFILE.md",
+    "BUSINESS_KNOWLEDGE.md",
     "DOCUMENTS/financials/sample profit report 2018.md"
   ]
 }

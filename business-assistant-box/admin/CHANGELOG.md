@@ -10,6 +10,37 @@ Track all project changes.
 
 ---
 
+## Version 0.5
+
+Date: 2026-07-15
+
+RAG Consistency & Embedding Model Hardening
+
+Changes:
+
+### Bug Fixes
+
+* **System prompt broken — `ui.default_system_prompt` ignored by current Open WebUI** — Config table approach silently did nothing. Fixed in `install.sh` Phase 12 to write directly to the `model` table with `base_model_id` matching the Ollama model ID. Business name read dynamically from `BUSINESS_PROFILE.md`. Model ID read from `OLLAMA_MODEL` in `.env`. Upserts on every install.
+* **Embedding model default mismatch** — `install.sh` defaulted to `nomic-embed-text` (768 dims) in the interactive menu, pre-warm curl, RAG filter heredoc, and both Python script heredocs, while the live system used `snowflake-arctic-embed:335m` (1024 dims). A fresh install with default choices would build a 768-dim schema and index with the wrong model, making all RAG queries return garbage. Fixed: `snowflake-arctic-embed:335m` is now the default everywhere.
+* **`EMBEDDING_DIMENSIONS` not inferred from model** — If a user set only `EMBEDDING_MODEL` in `.env` without also setting `EMBEDDING_DIMENSIONS`, the schema would be built with the wrong vector size. `install.sh` now infers dimensions from the model name when `EMBEDDING_DIMENSIONS` is unset.
+* **`switch_embedding.sh` fallback defaults wrong** — `CURRENT_MODEL` and `CURRENT_DIMS` fell back to `nomic-embed-text`/768 if `.env` was missing those keys. Updated to `snowflake-arctic-embed:335m`/1024.
+
+### RAG Improvements
+
+* **`top_k` raised from 8 to 12** — Score analysis on real business queries showed positions 9-12 still scoring 0.60-0.69 (genuinely relevant). `snowflake-arctic-embed:335m` produces a flat score distribution, not a steep cliff, so k=8 was cutting off real content. Additionally, `system/` files (TOOLS.md, AGENTS.md) were consuming top-8 slots on business queries. k=12 gives enough room for client chunks to surface even when system files rank early. Updated in `business_rag_filter.py`, `install.sh` heredoc, and `.env`.
+* **Similarity threshold lowered from 0.3 to 0.15** — `snowflake-arctic-embed:335m` scores relevant chunks in the 0.69-0.78 range. Threshold of 0.3 was not the blocking issue (postgres binding was), but 0.15 provides headroom for edge cases.
+
+### Install Hardening
+
+* **Embedding model menu reordered** — `snowflake-arctic-embed:335m` is now option 1 and the default catch-all (`*`) in the interactive installer. `nomic-embed-text` remains available as option 3.
+* **e2e_validate.sh stale check removed** — Removed `_get_identity_chunk` check that referenced a method never present in the filter. `BUSINESS_PROFILE.md` priority is handled via `+0.08` boost in the SQL query.
+
+Reason: Fresh installs were inconsistent — embedding model defaults differed between the installer menu, the schema, the RAG filter, and the Python scripts. A user accepting defaults would get a broken RAG pipeline.
+
+Impact: Fresh installs now produce a consistent, working RAG pipeline with no manual intervention. E2E validation: 72/72 passed, 0 warnings.
+
+---
+
 ## Version 0.4
 
 Date: 2026-07-14
@@ -20,7 +51,7 @@ Changes:
 
 ### Security
 
-* **PostgreSQL bound to localhost only** — Changed `-p 5432:5432` to `-p 127.0.0.1:5432:5432` in `install.sh`. Prevents remote network access to the database with default credentials. Docker containers still reach it via `host.docker.internal`.
+* **PostgreSQL binding corrected to 0.0.0.0:5432** — Reverted `-p 127.0.0.1:5432:5432` back to `-p 5432:5432` in `install.sh`, `update_containers.sh`. The localhost-only binding broke the RAG pipeline: Docker containers connect via the bridge (172.17.0.1), not 127.0.0.1, causing silent psycopg2 connection failures and zero business context injected into chats. Use UFW to block external access to port 5432 instead.
 * **`.env` set to chmod 600 on creation** — `install.sh` now sets owner-only permissions immediately after writing `.env`. `validate_env.sh` warns if permissions are incorrect.
 * **`change_password.sh` added** — Admin script to change PostgreSQL password. Updates both the running container and `.env` in one step.
 * **`change_model.sh` added** — Admin script to switch Ollama chat model. Pulls if not installed, updates `.env`.

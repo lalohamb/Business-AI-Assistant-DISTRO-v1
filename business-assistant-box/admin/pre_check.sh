@@ -143,7 +143,7 @@ if [ ! -d "$CLIENT_PATH" ]; then
   echo "[✗] Client directory missing: $CLIENT_PATH"
   FAIL=true
 else
-  for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+  for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
     if [ -f "$CLIENT_PATH/$f" ]; then
       echo "[✓] $f"
     else
@@ -253,7 +253,7 @@ if [ "$RAG_ENABLED" = "true" ]; then
 
   # Extension check
   echo -n "pgvector extension: "
-  PGV_CHECK=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT extname FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n')
+  PGV_CHECK=$(_docker exec -i postgres psql -U admin businessassistant -t -c 'SELECT extname FROM pg_extension WHERE extname=$$vector$$;' 2>/dev/null | tr -d ' \n')
   if [ "$PGV_CHECK" = "vector" ]; then
     echo "✅ Active"
   else
@@ -279,7 +279,7 @@ if [ "$RAG_ENABLED" = "true" ]; then
 
   # Tables
   echo -n "RAG tables: "
-  TABLE_COUNT=$(_docker exec -i postgres psql -U admin businessassistant -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('rag_documents','rag_chunks')" 2>/dev/null | tr -d ' \n')
+  TABLE_COUNT=$(_docker exec -i postgres psql -U admin businessassistant -t -c 'SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ($$rag_documents$$,$$rag_chunks$$)' 2>/dev/null | tr -d ' \n')
   if [ "$TABLE_COUNT" = "2" ]; then
     echo "✅ Both tables present"
   else

@@ -31,7 +31,7 @@ python3 vector-db/index_vault.py
 
 ## Files to Fill In (Priority Order)
 
-### 1. CLIENT_PROFILE.md (Required)
+### 1. BUSINESS_PROFILE.md (Required)
 The assistant's identity. Fill in:
 - Company name, industry, location
 - Products/services list
@@ -125,7 +125,7 @@ After setup, verify:
 
 ## Tips
 
-- Start with CLIENT_PROFILE.md and BUSINESS_KNOWLEDGE.md — these give the most value
+- Start with BUSINESS_PROFILE.md and BUSINESS_KNOWLEDGE.md — these give the most value
 - You don't need to fill every field in every file — blank fields are ignored
 - Add documents incrementally — you can re-index anytime
 - The assistant gets better as you add more specific knowledge

@@ -556,6 +556,30 @@ fi
 prompt_phase "PHASE 5 — Activate Workflows"
 
 # ==========================================
+# PHASE 5B — Restart n8n to apply workflow changes
+# ==========================================
+echo "=== PHASE 5B — Restart n8n ==="
+echo ""
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] Would restart n8n container"
+else
+  echo -n "  Restarting n8n container... "
+  if docker restart n8n >/dev/null 2>&1; then
+    echo "  Waiting for n8n to come back up..."
+    for i in $(seq 1 30); do
+      if curl -sf "http://localhost:5678/healthz" >/dev/null 2>&1; then
+        log_ok "n8n restarted and healthy"
+        break
+      fi
+      sleep 2
+    done
+  else
+    log_error "docker restart n8n failed — restart manually with: docker restart n8n"
+  fi
+fi
+echo ""
+
+# ==========================================
 # PHASE 6 — Create Webhook Mappings
 # ==========================================
 echo "=== PHASE 6 — Webhook Mappings ==="

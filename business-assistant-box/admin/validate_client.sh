@@ -21,7 +21,7 @@ echo "Validating client: $CLIENT"
 echo ""
 
 # Root files
-for f in CLIENT_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
+for f in BUSINESS_PROFILE.md OWNER_PREFERENCES.md BUSINESS_KNOWLEDGE.md FAQ.md; do
   if [ -f "$CLIENT_PATH/$f" ]; then
     echo "  [✓] $f"
   else

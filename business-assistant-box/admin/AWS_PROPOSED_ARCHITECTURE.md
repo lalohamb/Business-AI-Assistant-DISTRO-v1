@@ -146,7 +146,7 @@ Each request sets `SET app.current_tenant = 'acme-roofing'` at connection time �
 s3://bab-knowledge-vault/
 ├── acme-roofing/
 │   ├── BUSINESS_KNOWLEDGE.md
-│   ├── CLIENT_PROFILE.md
+│   ├── BUSINESS_PROFILE.md
 │   ├── OWNER_PREFERENCES.md
 │   ├── FAQ.md
 │   ├── PROCEDURES/
