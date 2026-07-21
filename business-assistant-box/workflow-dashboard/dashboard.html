@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Business Assistant — Workflow Launcher</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.02em; }
+  header .meta { font-size: 0.8rem; color: #a0aec0; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 20px 32px 0;
+    border-bottom: 2px solid #e2e8f0;
+    background: #fff;
+  }
+
+  .tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .tab.active { color: #1a1a2e; border-bottom-color: #4f46e5; }
+  .tab:hover:not(.active) { color: #4a5568; }
+
+  main { padding: 28px 32px; max-width: 1200px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e8ecf0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: box-shadow 0.15s;
+  }
+
+  .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+
+  .card-header { display: flex; align-items: flex-start; gap: 12px; }
+
+  .card-icon {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+
+  .card-title { font-size: 1rem; font-weight: 600; line-height: 1.3; }
+  .card-desc { font-size: 0.82rem; color: #718096; line-height: 1.5; }
+
+  .card-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-standard { background: #ebf8ff; color: #2b6cb0; }
+  .badge-selectable { background: #f0fff4; color: #276749; }
+
+  .card-fields { display: flex; flex-direction: column; gap: 8px; }
+
+  .card-fields input, .card-fields textarea, .card-fields select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    font-size: 0.85rem;
+    color: #2d3748;
+    background: #f7fafc;
+    transition: border-color 0.15s;
+  }
+
+  .card-fields input:focus, .card-fields textarea:focus {
+    outline: none;
+    border-color: #4f46e5;
+    background: #fff;
+  }
+
+  .card-fields label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card-fields textarea { resize: vertical; min-height: 60px; }
+
+  .btn-run {
+    margin-top: auto;
+    padding: 10px 18px;
+    background: #4f46e5;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  .btn-run:hover { background: #4338ca; }
+  .btn-run:active { transform: scale(0.98); }
+  .btn-run:disabled { background: #a0aec0; cursor: not-allowed; transform: none; }
+
+  .status {
+    font-size: 0.8rem;
+    padding: 7px 10px;
+    border-radius: 7px;
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status.ok { display: flex; background: #f0fff4; color: #276749; border: 1px solid #c6f6d5; }
+  .status.err { display: flex; background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+  .status.running { display: flex; background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty { color: #a0aec0; font-size: 0.9rem; padding: 40px 0; text-align: center; }
+
+  /* Icon colors per category */
+  .icon-briefing  { background: #ebf8ff; }
+  .icon-email     { background: #fef3c7; }
+  .icon-calendar  { background: #f0fff4; }
+  .icon-leads     { background: #fce7f3; }
+  .icon-intake    { background: #ede9fe; }
+  .icon-invoice   { background: #ecfdf5; }
+  .icon-docs      { background: #fff7ed; }
+  .icon-appt      { background: #f0f9ff; }
+  .icon-review    { background: #fefce8; }
+  .icon-expense   { background: #fdf4ff; }
+  .icon-report    { background: #f0fdf4; }
+  .icon-social    { background: #eff6ff; }
+  .icon-voice     { background: #fff1f2; }
+  .icon-default   { background: #f1f5f9; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏢 Business Assistant — Workflow Launcher</h1>
+  <span class="meta" id="header-meta">Loading...</span>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="filterTab('all', this)">All Workflows</button>
+  <button class="tab" onclick="filterTab('standard', this)">Standard</button>
+  <button class="tab" onclick="filterTab('selectable', this)">Selectable</button>
+</div>
+
+<main>
+  <div class="grid" id="grid">
+    <div class="empty">Loading workflows...</div>
+  </div>
+</main>
+
+<script>
+// ── Config ────────────────────────────────────────────────────
+const API = '';  // same origin
+
+// ── Workflow UI metadata ──────────────────────────────────────
+const WORKFLOW_META = {
+  'daily-briefing':        { icon: '📋', iconClass: 'icon-briefing',  fields: [] },
+  'email-triage':          { icon: '📧', iconClass: 'icon-email',     fields: [] },
+  'calendar-review':       { icon: '📅', iconClass: 'icon-calendar',  fields: [] },
+  'lead-followup':         { icon: '👥', iconClass: 'icon-leads',     fields: [
+    { id: 'notes', label: 'Notes (optional)', type: 'textarea', placeholder: 'Any specific instructions for today\'s follow-ups...' }
+  ]},
+  'customer-intake':       { icon: '🤝', iconClass: 'icon-intake',    fields: [
+    { id: 'name',    label: 'Client Name',     type: 'text',  placeholder: 'Full name', required: true },
+    { id: 'email',   label: 'Email',           type: 'text',  placeholder: 'client@email.com', required: true },
+    { id: 'phone',   label: 'Phone',           type: 'text',  placeholder: '(555) 000-0000' },
+    { id: 'service', label: 'Service Requested', type: 'text', placeholder: 'e.g. Credit repair consultation' },
+    { id: 'notes',   label: 'Notes',           type: 'textarea', placeholder: 'How did they find you? Any context...' },
+    { id: 'source',  label: 'Source',          type: 'text',  placeholder: 'e.g. referral, website, walk-in' }
+  ]},
+  'invoice-generator':     { icon: '🧾', iconClass: 'icon-invoice',   fields: [
+    { id: 'client_name',    label: 'Client Name',    type: 'text', placeholder: 'Client or company name', required: true },
+    { id: 'client_email',   label: 'Client Email',   type: 'text', placeholder: 'client@email.com' },
+    { id: 'line_items',     label: 'Services / Line Items', type: 'textarea', placeholder: 'e.g. Consultation - 2hrs @ $150, Document prep - $75' },
+    { id: 'payment_terms',  label: 'Payment Terms',  type: 'text', placeholder: 'Net 30' },
+    { id: 'notes',          label: 'Notes',          type: 'textarea', placeholder: 'Any additional invoice notes...' }
+  ]},
+  'document-drafting':     { icon: '📄', iconClass: 'icon-docs',      fields: [
+    { id: 'document_type', label: 'Document Type', type: 'text', placeholder: 'e.g. Proposal, Contract, Letter', required: true },
+    { id: 'recipient',     label: 'Recipient',     type: 'text', placeholder: 'Name or company' },
+    { id: 'context',       label: 'Context / Instructions', type: 'textarea', placeholder: 'What should this document cover?' }
+  ]},
+  'appointment-booking':   { icon: '🗓️', iconClass: 'icon-appt',      fields: [
+    { id: 'client_name',  label: 'Client Name',  type: 'text', placeholder: 'Full name', required: true },
+    { id: 'client_email', label: 'Client Email', type: 'text', placeholder: 'client@email.com' },
+    { id: 'service',      label: 'Service',      type: 'text', placeholder: 'Type of appointment' },
+    { id: 'preferred_time', label: 'Preferred Time', type: 'text', placeholder: 'e.g. Tuesday afternoon' }
+  ]},
+  'review-requester':      { icon: '⭐', iconClass: 'icon-review',     fields: [
+    { id: 'client_name',  label: 'Client Name',  type: 'text', placeholder: 'Full name', required: true },
+    { id: 'client_email', label: 'Client Email', type: 'text', placeholder: 'client@email.com', required: true },
+    { id: 'service',      label: 'Service Completed', type: 'text', placeholder: 'What service did they receive?' }
+  ]},
+  'expense-tracker':       { icon: '💰', iconClass: 'icon-expense',    fields: [
+    { id: 'description', label: 'Expense Description', type: 'text', placeholder: 'e.g. Office supplies', required: true },
+    { id: 'amount',      label: 'Amount ($)',          type: 'text', placeholder: '0.00', required: true },
+    { id: 'category',    label: 'Category',            type: 'text', placeholder: 'e.g. Office, Travel, Marketing' },
+    { id: 'date',        label: 'Date',                type: 'text', placeholder: 'YYYY-MM-DD' }
+  ]},
+  'report-generator':      { icon: '📊', iconClass: 'icon-report',     fields: [
+    { id: 'report_type', label: 'Report Type', type: 'text', placeholder: 'e.g. Weekly summary, Monthly P&L' },
+    { id: 'period',      label: 'Period',      type: 'text', placeholder: 'e.g. This week, July 2026' }
+  ]},
+  'social-post-scheduler': { icon: '📱', iconClass: 'icon-social',     fields: [
+    { id: 'topic',    label: 'Topic / Prompt', type: 'textarea', placeholder: 'What should the post be about?' },
+    { id: 'platform', label: 'Platform',       type: 'text',     placeholder: 'e.g. Facebook, Instagram, LinkedIn' }
+  ]},
+  'voicemail-transcription': { icon: '🎙️', iconClass: 'icon-voice',   fields: [
+    { id: 'file_path', label: 'Audio File Path', type: 'text', placeholder: '/path/to/voicemail.mp3' }
+  ]},
+};
+
+const DEFAULT_META = { icon: '⚙️', iconClass: 'icon-default', fields: [] };
+
+// ── State ─────────────────────────────────────────────────────
+let allWorkflows = [];
+let currentTab = 'all';
+
+// ── Boot ──────────────────────────────────────────────────────
+async function init() {
+  try {
+    const res = await fetch(`${API}/api/workflows`);
+    const data = await res.json();
+    allWorkflows = data.workflows || [];
+    updateMeta();
+    render();
+  } catch (e) {
+    document.getElementById('grid').innerHTML =
+      `<div class="empty">⚠️ Could not load workflows. Is the API running?<br><small>${e.message}</small></div>`;
+  }
+}
+
+function updateMeta() {
+  const d = new Date();
+  const day = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  document.getElementById('header-meta').textContent = `${allWorkflows.length} workflows  ·  ${day}`;
+}
+
+function filterTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function render() {
+  const filtered = currentTab === 'all'
+    ? allWorkflows
+    : allWorkflows.filter(w => w.tier === currentTab);
+
+  const grid = document.getElementById('grid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty">No workflows in this category.</div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(buildCard).join('');
+}
+
+function buildCard(w) {
+  const meta = WORKFLOW_META[w.id] || DEFAULT_META;
+  const badge = w.tier === 'standard'
+    ? `<span class="card-badge badge-standard">Standard</span>`
+    : `<span class="card-badge badge-selectable">Selectable</span>`;
+
+  const fields = meta.fields.map(f => {
+    const el = f.type === 'textarea'
+      ? `<textarea id="f_${w.id}_${f.id}" placeholder="${f.placeholder || ''}" rows="2"></textarea>`
+      : `<input type="text" id="f_${w.id}_${f.id}" placeholder="${f.placeholder || ''}">`;
+    return `<div><label>${f.label}</label>${el}</div>`;
+  }).join('');
+
+  const triggerLabel = w.trigger === 'cron' || w.trigger === 'polling'
+    ? `Scheduled · ${w.schedule || ''}`
+    : 'On Demand';
+
+  return `
+  <div class="card" id="card_${w.id}">
+    <div class="card-header">
+      <div class="card-icon ${meta.iconClass}">${meta.icon}</div>
+      <div>
+        <div class="card-title">${w.name}</div>
+        <div style="margin-top:4px">${badge}</div>
+      </div>
+    </div>
+    <div class="card-desc">${w.description}</div>
+    <div style="font-size:0.75rem;color:#a0aec0">⏱ ${triggerLabel}</div>
+    ${fields ? `<div class="card-fields">${fields}</div>` : ''}
+    <div class="status" id="status_${w.id}"></div>
+    <button class="btn-run" id="btn_${w.id}" onclick="runWorkflow('${w.id}')">
+      ▶ Run Now
+    </button>
+  </div>`;
+}
+
+// ── Run ───────────────────────────────────────────────────────
+async function runWorkflow(id) {
+  const btn = document.getElementById(`btn_${id}`);
+  const statusEl = document.getElementById(`status_${id}`);
+  const meta = WORKFLOW_META[id] || DEFAULT_META;
+
+  // Collect field values
+  const payload = {};
+  meta.fields.forEach(f => {
+    const el = document.getElementById(`f_${id}_${f.id}`);
+    if (el && el.value.trim()) payload[f.id] = el.value.trim();
+  });
+
+  // Validate required fields
+  const missing = meta.fields.filter(f => f.required && !payload[f.id]);
+  if (missing.length) {
+    setStatus(statusEl, 'err', `⚠️ Required: ${missing.map(f => f.label).join(', ')}`);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running...';
+  setStatus(statusEl, 'running', 'Sending to n8n...');
+
+  try {
+    const res = await fetch(`${API}/api/run/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (res.ok && data.ok) {
+      setStatus(statusEl, 'ok', `✅ Workflow started — ${data.detail || 'running'}`);
+    } else {
+      setStatus(statusEl, 'err', `❌ ${data.detail || 'Unknown error'}`);
+    }
+  } catch (e) {
+    setStatus(statusEl, 'err', `❌ Network error: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '▶ Run Now';
+  }
+}
+
+function setStatus(el, type, msg) {
+  el.className = `status ${type}`;
+  el.innerHTML = type === 'running'
+    ? `<span class="spinner"></span> ${msg}`
+    : msg;
+}
+
+init();
+</script>
+</body>
+</html>

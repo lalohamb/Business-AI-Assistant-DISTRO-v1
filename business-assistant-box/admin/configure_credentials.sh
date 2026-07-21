@@ -337,6 +337,56 @@ CRED_MAP_FILE="$BASE/n8n/CREDENTIAL_MAP.md"
 if [ "$DRY_RUN" = true ]; then
   echo "  [DRY RUN] Would save credential map to $CRED_MAP_FILE"
 else
+  # Write real credential IDs to .env so configure_n8n.sh can use them
+  echo "  Writing credential IDs to .env..."
+  CREDS_JSON=$(n8n_api GET "/credentials" 2>/dev/null)
+
+  declare -A CRED_ENV_MAP
+  CRED_ENV_MAP["Gmail OAuth2"]="GMAIL_CREDENTIAL_ID"
+  CRED_ENV_MAP["Google Calendar OAuth2"]="GCAL_CREDENTIAL_ID"
+  CRED_ENV_MAP["Google Sheets OAuth2"]="SHEETS_CREDENTIAL_ID"
+  CRED_ENV_MAP["Google Docs OAuth2"]="DOCS_CREDENTIAL_ID"
+  CRED_ENV_MAP["Google Drive OAuth2"]="DRIVE_CREDENTIAL_ID"
+
+  for cred_name in "${!CRED_ENV_MAP[@]}"; do
+    env_var="${CRED_ENV_MAP[$cred_name]}"
+    cred_id=$(echo "$CREDS_JSON" | jq -r ".data[] | select(.name == \"$cred_name\") | .id" 2>/dev/null | head -1)
+    if [ -n "$cred_id" ] && [ "$cred_id" != "null" ]; then
+      if grep -q "^${env_var}=" "$ENV_FILE" 2>/dev/null; then
+        sed -i "s|^${env_var}=.*|${env_var}=${cred_id}|" "$ENV_FILE"
+      else
+        echo "${env_var}=${cred_id}" >> "$ENV_FILE"
+      fi
+      echo "    $env_var=$cred_id"
+    fi
+  done
+  log_ok "Credential IDs written to .env"
+  echo ""
+
+  # Prompt for Google Sheet IDs needed by workflows
+  echo "  Google Sheet IDs are required for Lead Follow-Up, Customer Intake,"
+  echo "  Invoice Generator, and Report Generator workflows."
+  echo ""
+  echo "  For each, create a Google Sheet and paste the Sheet ID from its URL:"
+  echo "  https://docs.google.com/spreadsheets/d/SHEET_ID_IS_HERE/edit"
+  echo ""
+
+  for sheet_var in LEADS_SHEET_ID INTAKE_SHEET_ID INVOICE_SHEET_ID REPORT_SHEET_ID; do
+    current=$(grep "^${sheet_var}=" "$ENV_FILE" 2>/dev/null | cut -d= -f2)
+    if [ -n "$current" ]; then
+      echo "  $sheet_var already set: $current"
+    else
+      read -p "  $sheet_var (leave blank to skip): " sheet_id
+      if [ -n "$sheet_id" ]; then
+        echo "${sheet_var}=${sheet_id}" >> "$ENV_FILE"
+        log_ok "$sheet_var saved to .env"
+      else
+        echo "  Skipped $sheet_var — set it later in .env"
+      fi
+    fi
+  done
+  echo ""
+
   cat > "$CRED_MAP_FILE" <<EOF
 # Credential Map
 

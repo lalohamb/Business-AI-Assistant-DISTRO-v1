@@ -1,0 +1,275 @@
+{
+  "name": "Meta Ad Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meta-ad-publisher",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-trigger",
+      "name": "Webhook — Receive Approved Ad",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "OpenClaw or owner POSTs approved ad payload here. Required fields: campaign_type, primary_text, headline, description, cta_button, image_url, audience_id, ad_account_id, daily_budget_cents, platform"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconst required = ['campaign_type','primary_text','headline','description','cta_button','image_url','audience_id','ad_account_id','daily_budget_cents','platform'];\nconst missing = required.filter(f => !body[f]);\n\nif (missing.length > 0) {\n  throw new Error('Missing required fields: ' + missing.join(', '));\n}\n\nconst validPlatforms = ['facebook','instagram','both'];\nif (!validPlatforms.includes(body.platform)) {\n  throw new Error('platform must be facebook, instagram, or both');\n}\n\nif (body.daily_budget_cents < 100) {\n  throw new Error('daily_budget_cents must be at least 100 (= $1.00)');\n}\n\nreturn [{ json: body }];"
+      },
+      "id": "node-validate",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Validates all required fields are present before touching the Meta API"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/act_{{$json.ad_account_id}}/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "name", "value": "={{$json.campaign_type}} — {{$now.format('YYYY-MM-DD')}}" },
+            { "name": "objective", "value": "OUTCOME_LEADS" },
+            { "name": "status", "value": "PAUSED" },
+            { "name": "special_ad_categories", "value": "[\"CREDIT\"]" },
+            { "name": "daily_budget", "value": "={{$json.daily_budget_cents}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-create-campaign",
+      "name": "Create Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "credentials": { "httpHeaderAuth": { "id": "meta-api-token", "name": "Meta API Token" } },
+      "notes": "Creates the campaign shell. Status is PAUSED — only goes ACTIVE after full approval chain completes. CREDIT special ad category is mandatory for debt/credit services."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/act_{{$('Validate Payload').item.json.ad_account_id}}/adsets",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "name", "value": "=Ad Set — {{$('Validate Payload').item.json.campaign_type}} — {{$now.format('YYYY-MM-DD')}}" },
+            { "name": "campaign_id", "value": "={{$json.id}}" },
+            { "name": "billing_event", "value": "IMPRESSIONS" },
+            { "name": "optimization_goal", "value": "LEAD_GENERATION" },
+            { "name": "targeting", "value": "={\"geo_locations\":{\"countries\":[\"US\"]},\"age_min\":25,\"age_max\":55,\"custom_audiences\":[{\"id\":\"{{$('Validate Payload').item.json.audience_id}}\"}]}" },
+            { "name": "status", "value": "PAUSED" },
+            { "name": "daily_budget", "value": "={{$('Validate Payload').item.json.daily_budget_cents}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-create-adset",
+      "name": "Create Ad Set",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "credentials": { "httpHeaderAuth": { "id": "meta-api-token", "name": "Meta API Token" } },
+      "notes": "Creates the ad set with targeting. Audience ID must be pre-built in Meta Ads Manager. Targeting defaults to US, age 25-55 — update geo_locations for local targeting."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/act_{{$('Validate Payload').item.json.ad_account_id}}/adcreatives",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "name", "value": "=Creative — {{$('Validate Payload').item.json.campaign_type}} — {{$now.format('YYYY-MM-DD')}}" },
+            { "name": "object_story_spec", "value": "={\"page_id\":\"{{$('Validate Payload').item.json.page_id}}\",\"link_data\":{\"image_url\":\"{{$('Validate Payload').item.json.image_url}}\",\"link\":\"{{$('Validate Payload').item.json.destination_url}}\",\"message\":\"{{$('Validate Payload').item.json.primary_text}}\",\"name\":\"{{$('Validate Payload').item.json.headline}}\",\"description\":\"{{$('Validate Payload').item.json.description}}\",\"call_to_action\":{\"type\":\"{{$('Validate Payload').item.json.cta_button}}\",\"value\":{\"link\":\"{{$('Validate Payload').item.json.destination_url}}\"}}}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-create-creative",
+      "name": "Create Ad Creative",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "credentials": { "httpHeaderAuth": { "id": "meta-api-token", "name": "Meta API Token" } },
+      "notes": "Assembles the visual + copy into a creative object. image_url must be a publicly accessible URL. page_id and destination_url must be included in the webhook payload."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/act_{{$('Validate Payload').item.json.ad_account_id}}/ads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "name", "value": "=Ad — {{$('Validate Payload').item.json.campaign_type}} — {{$now.format('YYYY-MM-DD')}}" },
+            { "name": "adset_id", "value": "={{$('Create Ad Set').item.json.id}}" },
+            { "name": "creative", "value": "={\"creative_id\":\"{{$json.id}}\"}" },
+            { "name": "status", "value": "PAUSED" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-create-ad",
+      "name": "Create Ad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "credentials": { "httpHeaderAuth": { "id": "meta-api-token", "name": "Meta API Token" } },
+      "notes": "Creates the final ad object linking the ad set and creative. Still PAUSED at this point."
+    },
+    {
+      "parameters": {
+        "jsCode": "const adId = $('Create Ad').item.json.id;\nconst adSetId = $('Create Ad Set').item.json.id;\nconst campaignId = $('Create Campaign').item.json.id;\nconst payload = $('Validate Payload').item.json;\n\nreturn [{\n  json: {\n    action: 'approve_meta_ad',\n    ad_id: adId,\n    ad_set_id: adSetId,\n    campaign_id: campaignId,\n    campaign_type: payload.campaign_type,\n    platform: payload.platform,\n    headline: payload.headline,\n    primary_text: payload.primary_text,\n    daily_budget_dollars: (payload.daily_budget_cents / 100).toFixed(2),\n    created_at: new Date().toISOString(),\n    message: `Ad created in PAUSED state. Review in Meta Ads Manager and approve to activate. Campaign: ${campaignId} | Ad: ${adId}`\n  }\n}];"
+      },
+      "id": "node-build-approval",
+      "name": "Build Approval Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "notes": "Packages the campaign, ad set, and ad IDs into an approval payload for the Approval Router"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/approval-router",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "action", "value": "={{$json.action}}" },
+            { "name": "ad_id", "value": "={{$json.ad_id}}" },
+            { "name": "campaign_id", "value": "={{$json.campaign_id}}" },
+            { "name": "message", "value": "={{$json.message}}" },
+            { "name": "headline", "value": "={{$json.headline}}" },
+            { "name": "primary_text", "value": "={{$json.primary_text}}" },
+            { "name": "daily_budget_dollars", "value": "={{$json.daily_budget_dollars}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-approval-router",
+      "name": "Send to Approval Router",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 300],
+      "notes": "Routes to the existing Approval Router workflow. Owner receives notification with ad details and approves or rejects."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{$('Build Approval Payload').item.json.ad_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "status", "value": "ACTIVE" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-activate-ad",
+      "name": "Activate Ad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, 200],
+      "credentials": { "httpHeaderAuth": { "id": "meta-api-token", "name": "Meta API Token" } },
+      "notes": "Only reached if owner approves in the Approval Router. Sets ad status to ACTIVE — ad goes live."
+    },
+    {
+      "parameters": {
+        "jsCode": "const adId = $('Build Approval Payload').item.json.ad_id;\nconst campaignId = $('Build Approval Payload').item.json.campaign_id;\nconst headline = $('Build Approval Payload').item.json.headline;\nconst budget = $('Build Approval Payload').item.json.daily_budget_dollars;\n\nconst logEntry = `${new Date().toISOString()},${campaignId},${adId},\"${headline}\",${budget},ACTIVE\\n`;\n\nreturn [{ json: { log_entry: logEntry, ad_id: adId, campaign_id: campaignId } }];"
+      },
+      "id": "node-log-success",
+      "name": "Log Published Ad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 200],
+      "notes": "Builds a log entry for the published ads log"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrCreate",
+        "filePath": "=/home/ubuntu/.business-assistant-box/business-assistant-box/clients/credit-repair-co/OUTPUTS/published-ads.csv",
+        "content": "={{$json.log_entry}}",
+        "options": {}
+      },
+      "id": "node-write-log",
+      "name": "Write to Published Ads Log",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [2440, 200],
+      "notes": "Appends the published ad record to OUTPUTS/published-ads.csv for tracking"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"published\",\"ad_id\":\"{{$('Build Approval Payload').item.json.ad_id}}\",\"campaign_id\":\"{{$('Build Approval Payload').item.json.campaign_id}}\",\"message\":\"Ad is now ACTIVE on Meta.\"}"
+      },
+      "id": "node-respond-success",
+      "name": "Respond — Published",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"rejected\",\"message\":\"Ad was rejected by owner. Campaign remains PAUSED in Meta Ads Manager.\"}"
+      },
+      "id": "node-respond-rejected",
+      "name": "Respond — Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 420],
+      "notes": "If owner rejects, ad stays PAUSED. No further action taken. Owner can delete from Meta Ads Manager manually."
+    }
+  ],
+  "connections": {
+    "Webhook — Receive Approved Ad": {
+      "main": [[{ "node": "Validate Payload", "type": "main", "index": 0 }]]
+    },
+    "Validate Payload": {
+      "main": [[{ "node": "Create Campaign", "type": "main", "index": 0 }]]
+    },
+    "Create Campaign": {
+      "main": [[{ "node": "Create Ad Set", "type": "main", "index": 0 }]]
+    },
+    "Create Ad Set": {
+      "main": [[{ "node": "Create Ad Creative", "type": "main", "index": 0 }]]
+    },
+    "Create Ad Creative": {
+      "main": [[{ "node": "Create Ad", "type": "main", "index": 0 }]]
+    },
+    "Create Ad": {
+      "main": [[{ "node": "Build Approval Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Approval Payload": {
+      "main": [[{ "node": "Send to Approval Router", "type": "main", "index": 0 }]]
+    },
+    "Send to Approval Router": {
+      "main": [
+        [{ "node": "Activate Ad", "type": "main", "index": 0 }],
+        [{ "node": "Respond — Rejected", "type": "main", "index": 0 }]
+      ]
+    },
+    "Activate Ad": {
+      "main": [[{ "node": "Log Published Ad", "type": "main", "index": 0 }]]
+    },
+    "Log Published Ad": {
+      "main": [[{ "node": "Write to Published Ads Log", "type": "main", "index": 0 }]]
+    },
+    "Write to Published Ads Log": {
+      "main": [[{ "node": "Respond — Published", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["credit-repair-co", "meta", "ads", "social"]
+}

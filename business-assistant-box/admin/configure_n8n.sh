@@ -522,6 +522,131 @@ fi
 prompt_phase "PHASE 4 — Import Workflows"
 
 # ==========================================
+# PHASE 4B — Patch Credential IDs into Workflows
+# ==========================================
+echo "=== PHASE 4B — Patch Credential IDs into Workflows ==="
+echo ""
+echo "Replacing placeholder credential IDs with real n8n credential IDs..."
+echo ""
+
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] Would query n8n credentials and patch all workflow nodes"
+else
+  # Build credential name → id map from n8n
+  CRED_JSON=$(n8n_api GET "/credentials" 2>/dev/null)
+
+  if [ -z "$CRED_JSON" ] || echo "$CRED_JSON" | grep -q '"message"'; then
+    log_warn "Could not fetch credentials from n8n API. Skipping credential patching."
+    log_warn "Run ./admin/configure_credentials.sh first, then re-run this script."
+  else
+    # Extract id for each named credential
+    GMAIL_ID=$(echo "$CRED_JSON"       | jq -r '.data[] | select(.name == "Gmail OAuth2") | .id' 2>/dev/null | head -1)
+    GCAL_ID=$(echo "$CRED_JSON"        | jq -r '.data[] | select(.name == "Google Calendar OAuth2") | .id' 2>/dev/null | head -1)
+    SHEETS_ID=$(echo "$CRED_JSON"      | jq -r '.data[] | select(.name == "Google Sheets OAuth2") | .id' 2>/dev/null | head -1)
+    DOCS_ID=$(echo "$CRED_JSON"        | jq -r '.data[] | select(.name == "Google Docs OAuth2") | .id' 2>/dev/null | head -1)
+    DRIVE_ID=$(echo "$CRED_JSON"       | jq -r '.data[] | select(.name == "Google Drive OAuth2") | .id' 2>/dev/null | head -1)
+
+    echo "  Credential IDs found:"
+    echo "    Gmail OAuth2:            ${GMAIL_ID:-NOT FOUND}"
+    echo "    Google Calendar OAuth2:  ${GCAL_ID:-NOT FOUND}"
+    echo "    Google Sheets OAuth2:    ${SHEETS_ID:-NOT FOUND}"
+    echo "    Google Docs OAuth2:      ${DOCS_ID:-NOT FOUND}"
+    echo "    Google Drive OAuth2:     ${DRIVE_ID:-NOT FOUND}"
+    echo ""
+
+    # Write real IDs back to .env so they persist for future runs
+    for var_pair in \
+      "GMAIL_CREDENTIAL_ID:${GMAIL_ID}" \
+      "GCAL_CREDENTIAL_ID:${GCAL_ID}" \
+      "SHEETS_CREDENTIAL_ID:${SHEETS_ID}" \
+      "DOCS_CREDENTIAL_ID:${DOCS_ID}" \
+      "DRIVE_CREDENTIAL_ID:${DRIVE_ID}"
+    do
+      var_name="${var_pair%%:*}"
+      var_val="${var_pair##*:}"
+      [ -z "$var_val" ] && continue
+      if grep -q "^${var_name}=" "$ENV_FILE" 2>/dev/null; then
+        sed -i "s|^${var_name}=.*|${var_name}=${var_val}|" "$ENV_FILE"
+      else
+        echo "${var_name}=${var_val}" >> "$ENV_FILE"
+      fi
+    done
+    log_ok "Credential IDs saved to .env"
+    echo ""
+
+    # Patch each imported workflow via n8n API
+    PATCHED=0
+    PATCH_SKIPPED=0
+
+    all_wf_ids=$(n8n_api GET "/workflows" | jq -r '.data[] | select(.name | startswith("[BAB]")) | .id' 2>/dev/null)
+
+    while IFS= read -r wf_id; do
+      [ -z "$wf_id" ] && continue
+
+      wf_data=$(n8n_api GET "/workflows/$wf_id")
+      wf_name=$(echo "$wf_data" | jq -r '.name' 2>/dev/null)
+
+      # Use python3 to patch credential IDs inside the nodes array
+      patched=$(echo "$wf_data" | python3 -c "
+import json, sys
+
+data = json.load(sys.stdin)
+nodes = data.get('nodes', [])
+
+CRED_MAP = {
+    'GMAIL_CREDENTIAL_ID':   ('${GMAIL_ID:-}',  'Gmail OAuth2'),
+    'GCAL_CREDENTIAL_ID':    ('${GCAL_ID:-}',   'Google Calendar OAuth2'),
+    'SHEETS_CREDENTIAL_ID':  ('${SHEETS_ID:-}', 'Google Sheets OAuth2'),
+    'DOCS_CREDENTIAL_ID':    ('${DOCS_ID:-}',   'Google Docs OAuth2'),
+    'DRIVE_CREDENTIAL_ID':   ('${DRIVE_ID:-}',  'Google Drive OAuth2'),
+}
+
+changed = False
+for node in nodes:
+    creds = node.get('credentials', {})
+    for cred_key, cred_val in creds.items():
+        placeholder = cred_val.get('id', '')
+        if placeholder in CRED_MAP:
+            real_id, real_name = CRED_MAP[placeholder]
+            if real_id:
+                cred_val['id'] = real_id
+                cred_val['name'] = real_name
+                changed = True
+
+if changed:
+    # Strip fields n8n rejects on PUT
+    for field in ('createdAt', 'updatedAt', 'versionId'):
+        data.pop(field, None)
+    print(json.dumps(data))
+else:
+    print('NO_CHANGE')
+" 2>/dev/null)
+
+      if [ "$patched" = "NO_CHANGE" ] || [ -z "$patched" ]; then
+        echo "  — No placeholders: $wf_name"
+        PATCH_SKIPPED=$((PATCH_SKIPPED + 1))
+        continue
+      fi
+
+      result=$(n8n_api PUT "/workflows/$wf_id" "$patched")
+      updated_id=$(echo "$result" | jq -r '.id' 2>/dev/null)
+      if [ -n "$updated_id" ] && [ "$updated_id" != "null" ]; then
+        log_ok "Patched: $wf_name"
+        PATCHED=$((PATCHED + 1))
+      else
+        err=$(echo "$result" | jq -r '.message // "unknown error"' 2>/dev/null)
+        log_warn "Failed to patch $wf_name: $err"
+      fi
+    done <<< "$all_wf_ids"
+
+    echo ""
+    echo "  Patched: $PATCHED workflows | Skipped (no placeholders): $PATCH_SKIPPED"
+  fi
+fi
+
+prompt_phase "PHASE 4B — Patch Credential IDs"
+
+# ==========================================
 # PHASE 5 — Activate Workflows
 # ==========================================
 echo "=== PHASE 5 — Activate Workflows ==="

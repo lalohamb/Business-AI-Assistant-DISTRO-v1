@@ -213,6 +213,22 @@
       "estimatedSetupMinutes": 15
     },
     {
+      "id": "meta-ad-publisher",
+      "name": "Meta Ad Publisher",
+      "file": "selectable/meta-ad-publisher.json",
+      "tier": "selectable",
+      "description": "Publishes approved Facebook and Instagram ads via Meta Marketing API. Creates campaign, ad set, creative, and ad in PAUSED state, routes through Approval Router, then activates on owner approval.",
+      "requiredCredentials": ["meta_api_token"],
+      "requiredGoogleScopes": [],
+      "businessTypes": ["credit-repair", "insurance", "real-estate", "general"],
+      "complexity": "high",
+      "trigger": "webhook",
+      "schedule": null,
+      "estimatedSetupMinutes": 45,
+      "setupDoc": "admin/META_AD_PUBLISHER_SETUP.md",
+      "notes": "Requires Meta App with Marketing API access. Must use CREDIT special ad category for credit repair businesses. See setup doc before activating."
+    },
+    {
       "id": "voicemail-transcription",
       "name": "Voicemail Transcription",
       "file": "selectable/voicemail-transcription.json",

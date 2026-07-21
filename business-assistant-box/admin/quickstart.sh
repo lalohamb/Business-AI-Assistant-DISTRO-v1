@@ -231,9 +231,14 @@ case "$rag_choice" in
 esac
 
 # ==========================================
-# PHASE 7 — Validation
+# PHASE 7 — Workflow GUI
 # ==========================================
-run_phase 7 "Validation (post_install_verify.sh)" "$SCRIPT_DIR/post_install_verify.sh"
+run_phase 7 "Workflow GUI (install_workflow_gui.sh)" "$SCRIPT_DIR/install_workflow_gui.sh"
+
+# ==========================================
+# PHASE 8 — Validation
+# ==========================================
+run_phase 8 "Validation (post_install_verify.sh)" "$SCRIPT_DIR/post_install_verify.sh"
 
 # ==========================================
 # SUMMARY
